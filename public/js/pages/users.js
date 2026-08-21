@@ -1,4 +1,4 @@
-import { h, clear, fmtDate } from '../dom.js';
+import { h, clear, fmtDate, confirmModal } from '../dom.js';
 import { api } from '../api.js';
 
 const ROLE_LABEL = { head_coach: 'Head Coach', treinador: 'Treinador', responsavel: 'Responsável' };
@@ -32,10 +32,17 @@ export async function renderUsers(main, ctx) {
       h('td', {}, [h('span', { class: 'badge badge-neutral' }, [ROLE_LABEL[u.role] || u.role])]),
       h('td', {}, [u.athletes.length ? u.athletes.map((a) => a.athleteName).join(', ') : '-']),
       h('td', {}, [u.active ? h('span', { class: 'badge badge-win' }, ['ativo']) : h('span', { class: 'badge badge-loss' }, ['inativo'])]),
-      h('td', {}, [
+      h('td', { style: 'display:flex;gap:8px' }, [
         u.role === 'head_coach' ? null : h('button', {
           class: 'btn btn-sm', onClick: async () => { await api.patch(`/api/users/${u.id}`, { active: !u.active }); renderUsers(main, ctx); },
         }, [u.active ? 'Desativar' : 'Ativar']),
+        u.role === 'head_coach' ? null : h('button', {
+          class: 'btn btn-sm btn-danger',
+          onClick: () => confirmModal(`Excluir o usuário "${u.name}"? Esta ação não pode ser desfeita.`, async () => {
+            await api.del(`/api/users/${u.id}`);
+            renderUsers(main, ctx);
+          }),
+        }, ['Excluir']),
       ]),
     ]))),
   ]);
