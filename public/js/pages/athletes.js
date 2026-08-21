@@ -12,7 +12,7 @@ export async function renderAthletes(main, ctx) {
 
   main.appendChild(h('div', { class: 'page-header' }, [
     h('div', {}, [h('h1', {}, ['Atletas']), h('p', {}, ['Elenco de atletas sob sua orientação.'])]),
-    canEdit ? h('button', { class: 'btn btn-primary', onClick: () => openAthleteModal(async () => renderAthletes(main, ctx)) }, ['+ Novo atleta']) : null,
+    canEdit ? h('button', { class: 'btn btn-primary', onClick: () => openAthleteModal(async () => renderAthletes(main, ctx), null) }, ['+ Novo atleta']) : null,
   ]));
 
   if (!athletes.length) {
@@ -29,46 +29,59 @@ export async function renderAthletes(main, ctx) {
         a.ranking_position ? h('p', {}, [`Ranking: #${a.ranking_position}`]) : null,
         a.club ? h('p', {}, [a.club]) : null,
       ]),
-      canEdit ? h('button', {
-        class: 'btn btn-sm btn-danger', type: 'button', style: 'margin-top:10px',
-        onClick: () => confirmModal(`Excluir ${a.name}? Isso remove também suas presenças, avaliações, jogos e análises registradas.`, async () => {
-          await api.del(`/api/athletes/${a.id}`);
-          renderAthletes(main, ctx);
-        }),
-      }, ['Excluir']) : null,
+      canEdit ? h('div', { style: 'margin-top:10px;display:flex;gap:6px' }, [
+        h('button', {
+          class: 'btn btn-sm', type: 'button',
+          onClick: () => openAthleteModal(async () => renderAthletes(main, ctx), a),
+        }, ['Editar']),
+        h('button', {
+          class: 'btn btn-sm btn-danger', type: 'button',
+          onClick: () => confirmModal(`Excluir ${a.name}? Isso remove também suas presenças, avaliações, jogos e análises registradas.`, async () => {
+            await api.del(`/api/athletes/${a.id}`);
+            renderAthletes(main, ctx);
+          }),
+        }, ['Excluir']),
+      ]) : null,
     ]);
     grid.appendChild(card);
   });
   main.appendChild(grid);
 }
 
-function openAthleteModal(onDone) {
+function openAthleteModal(onDone, athlete) {
+  const isEdit = !!athlete;
   const backdrop = h('div', { class: 'modal-backdrop' });
-  const name = h('input', { required: true, placeholder: 'Nome completo' });
-  const birth = h('input', { type: 'date' });
-  const category = h('select', {}, [h('option', { value: '' }, ['Categoria']), ...CATEGORY_OPTS.map((c) => h('option', { value: c }, [c]))]);
-  const gender = h('select', {}, [h('option', { value: '' }, ['Sexo']), ...GENDER_OPTS.map(([v, l]) => h('option', { value: v }, [l]))]);
-  const hand = h('select', {}, [h('option', { value: '' }, ['Mão dominante']), h('option', { value: 'Destro(a)' }, ['Destro(a)']), h('option', { value: 'Canhoto(a)' }, ['Canhoto(a)'])]);
-  const ranking = h('input', { type: 'number', placeholder: 'Posição no ranking' });
-  const club = h('input', { placeholder: 'Clube' });
-  const notes = h('textarea', { placeholder: 'Observações' });
+  const name = h('input', { required: true, placeholder: 'Nome completo', value: athlete?.name || '' });
+  const birth = h('input', { type: 'date', value: athlete?.birth_date || '' });
+  const category = h('select', {}, [h('option', { value: '' }, ['Categoria']), ...CATEGORY_OPTS.map((c) => h('option', { value: c, selected: athlete?.category === c }, [c]))]);
+  const gender = h('select', {}, [h('option', { value: '' }, ['Sexo']), ...GENDER_OPTS.map(([v, l]) => h('option', { value: v, selected: athlete?.gender === v }, [l]))]);
+  const hand = h('select', {}, [
+    h('option', { value: '' }, ['Mão dominante']),
+    h('option', { value: 'Destro(a)', selected: athlete?.dominant_hand === 'Destro(a)' }, ['Destro(a)']),
+    h('option', { value: 'Canhoto(a)', selected: athlete?.dominant_hand === 'Canhoto(a)' }, ['Canhoto(a)']),
+  ]);
+  const ranking = h('input', { type: 'number', placeholder: 'Posição no ranking', value: athlete?.ranking_position ?? '' });
+  const club = h('input', { placeholder: 'Clube', value: athlete?.club || '' });
+  const notes = h('textarea', { placeholder: 'Observações' }, [athlete?.notes || '']);
   const errorBox = h('div', { class: 'error-msg' });
 
   const form = h('form', {
     onSubmit: async (e) => {
       e.preventDefault();
       try {
-        await api.post('/api/athletes', {
+        const payload = {
           name: name.value, birthDate: birth.value || null, category: category.value || null,
           gender: gender.value || null, dominantHand: hand.value || null, rankingPosition: ranking.value ? Number(ranking.value) : null,
           club: club.value || null, notes: notes.value || null,
-        });
+        };
+        if (isEdit) await api.put(`/api/athletes/${athlete.id}`, payload);
+        else await api.post('/api/athletes', payload);
         backdrop.remove();
         onDone();
       } catch (err) { errorBox.textContent = err.message; }
     },
   }, [
-    h('h2', {}, ['Novo atleta']),
+    h('h2', {}, [isEdit ? `Editar ${athlete.name}` : 'Novo atleta']),
     h('div', { class: 'form-grid', style: 'margin-top:14px' }, [
       h('div', { class: 'form-field span-2' }, [h('label', {}, ['Nome']), name]),
       h('div', { class: 'form-field' }, [h('label', {}, ['Nascimento']), birth]),
