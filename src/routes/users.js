@@ -53,7 +53,17 @@ export function registerUserRoutes(router) {
 
     const name = body.name !== undefined ? body.name : existing.name;
     const active = body.active !== undefined ? (body.active ? 1 : 0) : existing.active;
-    db.prepare('UPDATE users SET name = ?, active = ? WHERE id = ?').run(name, active, id);
+    let email = existing.email;
+    if (body.email !== undefined) {
+      const nextEmail = (body.email || '').trim().toLowerCase();
+      if (!nextEmail) return sendJson(res, 400, { error: 'Email nao pode ser vazio.' });
+      if (nextEmail !== existing.email) {
+        const emailTaken = db.prepare('SELECT id FROM users WHERE email = ? AND id != ?').get(nextEmail, id);
+        if (emailTaken) return sendJson(res, 409, { error: 'Ja existe um usuario com este email.' });
+      }
+      email = nextEmail;
+    }
+    db.prepare('UPDATE users SET name = ?, email = ?, active = ? WHERE id = ?').run(name, email, active, id);
 
     if (body.password) {
       const { hash, salt } = hashPassword(body.password);
