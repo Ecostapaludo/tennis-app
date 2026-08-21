@@ -194,6 +194,7 @@ CREATE TABLE IF NOT EXISTS matches (
   match_type TEXT NOT NULL CHECK (match_type IN ('torneio','treino','ranking')),
   tournament_name TEXT,
   opponent_name TEXT,
+  opponent_athlete_id INTEGER REFERENCES athletes(id) ON DELETE SET NULL,
   result TEXT CHECK (result IN ('vitoria','derrota', NULL)),
   sets_score TEXT,
   aces INTEGER,

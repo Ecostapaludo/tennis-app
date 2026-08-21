@@ -55,7 +55,9 @@ export async function renderMatches(main, ctx) {
         h('td', {}, [fmtDate(m.date)]),
         h('td', {}, [athleteById[m.athlete_id] || `#${m.athlete_id}`]),
         h('td', {}, [h('span', { class: `badge badge-${m.match_type}` }, [m.match_type])]),
-        h('td', {}, [m.opponent_name || '-']),
+        h('td', {}, [m.opponent_athlete_id
+          ? h('a', { href: `#/athletes/${m.opponent_athlete_id}` }, [m.opponent_name || `#${m.opponent_athlete_id}`])
+          : (m.opponent_name || '-')]),
         h('td', {}, [h('span', { class: `badge ${m.result === 'vitoria' ? 'badge-win' : m.result === 'derrota' ? 'badge-loss' : 'badge-neutral'}` }, [m.result || '-'])]),
         h('td', {}, [m.sets_score || '-']),
         h('td', { class: 'num' }, [m.unforced_errors ?? '-']),
@@ -271,6 +273,7 @@ function renderLiveScout(main, ctx, athletes, onExit) {
     phase: 'setup',
     athleteId: athletes[0] ? athletes[0].id : null,
     opponentName: '',
+    opponentAthleteId: null,
     matchType: 'torneio',
     matchFormat: 'two_sets_super_tb',
     customFormat: { ...DEFAULT_CUSTOM_FORMAT },
@@ -290,6 +293,23 @@ function renderLiveScout(main, ctx, athletes, onExit) {
     const athleteSelect = h('select', { required: true }, athletes.map((a) => h('option', { value: a.id }, [a.name])));
     athleteSelect.value = state.athleteId;
     const opponentInput = h('input', { placeholder: 'Nome do adversário', value: state.opponentName });
+    opponentInput.disabled = !!state.opponentAthleteId;
+    const opponentAthleteSelect = h('select', {}, [
+      h('option', { value: '' }, ['— Nome livre (campo ao lado) —']),
+      ...athletes.map((a) => h('option', { value: a.id, selected: state.opponentAthleteId === a.id }, [a.name])),
+    ]);
+    opponentAthleteSelect.value = state.opponentAthleteId || '';
+    const setupErrorBox = h('div', { class: 'error-msg' });
+    opponentAthleteSelect.addEventListener('change', () => {
+      if (opponentAthleteSelect.value) {
+        const opp = athletes.find((a) => a.id === Number(opponentAthleteSelect.value));
+        opponentInput.value = opp ? opp.name : '';
+        opponentInput.disabled = true;
+      } else {
+        opponentInput.value = '';
+        opponentInput.disabled = false;
+      }
+    });
     const matchTypeSelect = h('select', {}, TYPES.map(([v, l]) => h('option', { value: v }, [l])));
     matchTypeSelect.value = state.matchType;
     const matchFormatSelect = h('select', {}, [
@@ -336,20 +356,29 @@ function renderLiveScout(main, ctx, athletes, onExit) {
     main.appendChild(h('div', { class: 'card', style: 'max-width:520px' }, [
       h('div', { class: 'form-grid' }, [
         h('div', { class: 'form-field span-2' }, [h('label', {}, ['Atleta']), athleteSelect]),
-        h('div', { class: 'form-field' }, [h('label', {}, ['Adversário']), opponentInput]),
+        h('div', { class: 'form-field' }, [h('label', {}, ['Adversário cadastrado (opcional)']), opponentAthleteSelect]),
+        h('div', { class: 'form-field' }, [h('label', {}, ['Nome do adversário (se não cadastrado)']), opponentInput]),
         h('div', { class: 'form-field' }, [h('label', {}, ['Tipo de jogo']), matchTypeSelect]),
         h('div', { class: 'form-field span-2' }, [h('label', {}, ['Formato de disputa']), matchFormatSelect]),
         h('div', { class: 'form-field' }, [h('label', {}, ['Torneio (opcional)']), tournamentInput]),
         h('div', { class: 'form-field' }, [h('label', {}, ['Data']), dateInput]),
       ]),
       customFormatWrap,
+      setupErrorBox,
       h('div', { class: 'form-actions' }, [
         h('button', {
           class: 'btn btn-primary', type: 'button',
           onClick: () => {
             if (!athleteSelect.value) return;
+            const oppAthleteId = opponentAthleteSelect.value ? Number(opponentAthleteSelect.value) : null;
+            if (oppAthleteId && oppAthleteId === Number(athleteSelect.value)) {
+              setupErrorBox.textContent = 'O adversário cadastrado não pode ser o mesmo atleta.';
+              return;
+            }
+            setupErrorBox.textContent = '';
             state.athleteId = Number(athleteSelect.value);
-            state.opponentName = opponentInput.value;
+            state.opponentAthleteId = oppAthleteId;
+            state.opponentName = oppAthleteId ? (athletes.find((a) => a.id === oppAthleteId)?.name || '') : opponentInput.value;
             state.matchType = matchTypeSelect.value;
             state.matchFormat = matchFormatSelect.value;
             state.customFormat = {
@@ -483,6 +512,14 @@ function renderLiveScout(main, ctx, athletes, onExit) {
       h('div', {}, [h('h1', {}, ['Finalizar jogo']), h('p', {}, [`${athleteName} vs ${state.opponentName || 'Adversário'}`])]),
     ]));
 
+    if (state.opponentAthleteId) {
+      main.appendChild(h('div', { class: 'card', style: 'background:var(--surface-2)' }, [
+        h('p', { style: 'font-size:13px;margin:0' }, [
+          `Como o adversário também é um aluno cadastrado, o resultado será lançado automaticamente para ambos: vitória/derrota e placar espelhados para ${state.opponentName}.`,
+        ]),
+      ]));
+    }
+
     main.appendChild(h('div', { class: 'card' }, [
       h('h3', {}, ['Estatísticas marcadas']),
       h('div', { class: 'scout-stats-summary' }, [
@@ -513,6 +550,7 @@ function renderLiveScout(main, ctx, athletes, onExit) {
               await api.post('/api/matches', {
                 athleteId: state.athleteId, date: state.date, matchType: state.matchType,
                 tournamentName: state.tournamentName || null, opponentName: state.opponentName || null,
+                opponentAthleteId: state.opponentAthleteId || null,
                 result: result.value || null, setsScore: setsScore.value || null,
                 aces: stats.aces, doubleFaults: stats.doubleFaults, firstServePct: stats.firstServePct,
                 firstServePointsWonPct: stats.firstServePointsWonPct, secondServePointsWonPct: stats.secondServePointsWonPct,

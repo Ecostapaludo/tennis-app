@@ -11,6 +11,28 @@ function attachReport(row) {
   };
 }
 
+// Inverte um placar de sets (ex: "6-4, 3-6, [10-7]" -> "4-6, 6-3, [7-10]") para
+// gravar o mesmo jogo do ponto de vista do adversario, quando ele tambem e um
+// aluno cadastrado.
+function mirrorSetsScore(setsScore) {
+  if (!setsScore) return null;
+  return setsScore.split(',').map((raw) => {
+    const s = raw.trim();
+    const bracket = s.startsWith('[') && s.endsWith(']');
+    const inner = bracket ? s.slice(1, -1) : s;
+    const m = inner.match(/^(\d+)\s*-\s*(\d+)(.*)$/);
+    if (!m) return s;
+    const mirrored = `${m[2]}-${m[1]}${m[3]}`;
+    return bracket ? `[${mirrored}]` : mirrored;
+  }).join(', ');
+}
+
+function mirrorResult(result) {
+  if (result === 'vitoria') return 'derrota';
+  if (result === 'derrota') return 'vitoria';
+  return null;
+}
+
 export function registerMatchRoutes(router) {
   router.get('/api/matches', async (req, res, params, user, query) => {
     const scoped = scopeAthleteIds(user);
@@ -43,21 +65,39 @@ export function registerMatchRoutes(router) {
   router.post('/api/matches', async (req, res) => {
     const b = await readJsonBody(req);
     if (!b.athleteId || !b.date || !b.matchType) return sendJson(res, 400, { error: 'Atleta, data e tipo de jogo sao obrigatorios.' });
+    const opponentAthleteId = b.opponentAthleteId ? Number(b.opponentAthleteId) : null;
+    if (opponentAthleteId === Number(b.athleteId)) {
+      return sendJson(res, 400, { error: 'O adversário cadastrado não pode ser o mesmo atleta.' });
+    }
     const info = db.prepare(
-      `INSERT INTO matches (athlete_id, date, match_type, tournament_name, opponent_name, result, sets_score,
+      `INSERT INTO matches (athlete_id, date, match_type, tournament_name, opponent_name, opponent_athlete_id, result, sets_score,
         aces, double_faults, first_serve_pct, first_serve_points_won_pct, second_serve_points_won_pct,
         winners, unforced_errors, break_points_won, break_points_faced, net_points_won, net_points_total,
         rallies_up_to_4, rallies_over_4, match_format, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
-      b.athleteId, b.date, b.matchType, b.tournamentName || null, b.opponentName || null, b.result || null,
+      b.athleteId, b.date, b.matchType, b.tournamentName || null, b.opponentName || null, opponentAthleteId, b.result || null,
       b.setsScore || null, b.aces ?? null, b.doubleFaults ?? null, b.firstServePct ?? null,
       b.firstServePointsWonPct ?? null, b.secondServePointsWonPct ?? null, b.winners ?? null,
       b.unforcedErrors ?? null, b.breakPointsWon ?? null, b.breakPointsFaced ?? null,
       b.netPointsWon ?? null, b.netPointsTotal ?? null,
       b.ralliesUpTo4 ?? null, b.ralliesOver4 ?? null, b.matchFormat || null, b.notes || null
     );
-    sendJson(res, 201, { id: Number(info.lastInsertRowid) });
+    const matchId = Number(info.lastInsertRowid);
+
+    if (opponentAthleteId) {
+      const athlete = db.prepare('SELECT name FROM athletes WHERE id = ?').get(b.athleteId);
+      db.prepare(
+        `INSERT INTO matches (athlete_id, date, match_type, tournament_name, opponent_name, opponent_athlete_id, result, sets_score, match_format, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        opponentAthleteId, b.date, b.matchType, b.tournamentName || null, athlete ? athlete.name : null, Number(b.athleteId),
+        mirrorResult(b.result), mirrorSetsScore(b.setsScore), b.matchFormat || null,
+        'Lançado automaticamente a partir do jogo registrado para ' + (athlete ? athlete.name : 'o adversário') + '.'
+      );
+    }
+
+    sendJson(res, 201, { id: matchId });
   });
 
   router.delete('/api/matches/:id', async (req, res, params) => {
