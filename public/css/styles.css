@@ -220,6 +220,7 @@ main.content {
 .scout-tap-btn.negative .count { color: var(--status-critical); }
 .scout-tap-btn.neutral { border-color: var(--status-warning); }
 .scout-tap-btn.neutral .count { color: var(--status-warning); }
+.scout-tap-btn.detail { border-style: dashed; }
 
 .scout-score-card { border-color: var(--series-1); }
 

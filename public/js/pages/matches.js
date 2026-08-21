@@ -81,6 +81,16 @@ export async function renderMatches(main, ctx) {
 // sao calculadas automaticamente a partir dos toques.
 // ---------------------------------------------------------------------------
 
+// Cada ponto e decidido por exatamente 1 toque de "resultado do ponto" (grupos
+// "sacando"/"devolvendo" abaixo, ver MY_POINT_TYPES/OPP_POINT_TYPES). Os toques
+// de "detalhe do ponto" (winner/erro/rede/break point) NAO contam ponto -- eles
+// so descrevem o ponto que acabou de ser marcado. Essa separacao existe porque
+// antes um mesmo ponto podia ser contado 2x quando o treinador tocava tanto o
+// resultado do saque (ex: "1º saque: ponto ganho") quanto o tipo de golpe (ex:
+// "Winner") -- os dois pareciam toques independentes mas descreviam o mesmo
+// ponto. Padrao inspirado em apps de scout ao vivo (ex: Yellow Tap, Ultimate
+// Tennis Statistics): resultado do ponto = 1 unica fonte de verdade do placar;
+// tudo o mais e estatistica opcional.
 const TAP_TYPES = {
   ace: { label: 'Ace', variant: 'positive' },
   first_won: { label: '1º saque: ponto ganho', variant: 'positive' },
@@ -88,15 +98,20 @@ const TAP_TYPES = {
   first_out: { label: '1º saque: fora', variant: 'neutral' },
   second_won: { label: '2º saque: ponto ganho', variant: 'positive' },
   second_lost: { label: '2º saque: ponto perdido', variant: 'negative' },
-  double_fault: { label: 'Dupla falta', variant: 'negative' },
-  winner: { label: 'Winner', variant: 'positive' },
-  unforced_error: { label: 'Erro não forçado', variant: 'negative' },
-  net_won: { label: 'Ponto de rede: ganho', variant: 'positive' },
-  net_lost: { label: 'Ponto de rede: perdido', variant: 'negative' },
-  bp_saved: { label: 'Break point: salvo', variant: 'positive' },
-  bp_lost: { label: 'Break point: perdido', variant: 'negative' },
-  rally_short: { label: 'Rally curto (até 4 trocas)', variant: 'neutral' },
-  rally_long: { label: 'Rally longo (acima de 4 trocas)', variant: 'neutral' },
+  double_fault: { label: 'Dupla falta (meu atleta)', variant: 'negative' },
+  opp_ace: { label: 'Ace do adversário', variant: 'negative' },
+  opp_double_fault: { label: 'Dupla falta do adversário', variant: 'positive' },
+  return_won: { label: 'Ponto de devolução: ganho', variant: 'positive' },
+  return_lost: { label: 'Ponto de devolução: perdido', variant: 'negative' },
+  winner: { label: 'Winner', variant: 'positive', detail: true },
+  unforced_error: { label: 'Erro não forçado', variant: 'negative', detail: true },
+  forced_error: { label: 'Erro forçado (pelo adversário)', variant: 'neutral', detail: true },
+  net_won: { label: 'Ponto de rede: ganho', variant: 'positive', detail: true },
+  net_lost: { label: 'Ponto de rede: perdido', variant: 'negative', detail: true },
+  bp_saved: { label: 'Break point: salvo', variant: 'positive', detail: true },
+  bp_lost: { label: 'Break point: perdido', variant: 'negative', detail: true },
+  rally_short: { label: 'Rally até 4 trocas', variant: 'neutral', detail: true },
+  rally_long: { label: 'Rally acima de 4 trocas', variant: 'neutral', detail: true },
 };
 
 // ---------------------------------------------------------------------------
@@ -215,11 +230,17 @@ function deriveSetsScoreText(sets) {
   return sets.map((s) => (s.superTb ? `[${s.my}-${s.opp}]` : `${s.my}-${s.opp}`)).join(', ');
 }
 
-// O placar nao tem botao proprio -- ele e derivado automaticamente das marcacoes
-// de estatistica ja feitas (cada tipo de toque abaixo indica quem ganhou o ponto,
-// exceto '1º saque: fora', que so registra a falta e nao encerra o ponto).
-const MY_POINT_TYPES = new Set(['ace', 'first_won', 'second_won', 'winner', 'net_won', 'bp_saved']);
-const OPP_POINT_TYPES = new Set(['first_lost', 'second_lost', 'double_fault', 'unforced_error', 'net_lost', 'bp_lost']);
+// O placar nao tem botao proprio -- ele e derivado automaticamente dos toques de
+// "resultado do ponto" (grupos "sacando"/"devolvendo" na tela ao vivo). Cada
+// ponto so pode terminar de 1 jeito, entao estes dois conjuntos sao mutuamente
+// exclusivos e cobrem TODOS os casos (saque do meu atleta e saque do
+// adversario) -- '1º saque: fora' fica de fora pois so registra a falta, sem
+// encerrar o ponto. Os toques de "detalhe do ponto" (winner/erro/rede/break
+// point, ver TAP_TYPES) nao entram aqui de proposito: eles so descrevem o
+// ponto que acabou de ser contado por um destes toques, e nunca somam ponto
+// por conta propria.
+const MY_POINT_TYPES = new Set(['ace', 'first_won', 'second_won', 'opp_double_fault', 'return_won']);
+const OPP_POINT_TYPES = new Set(['first_lost', 'second_lost', 'double_fault', 'opp_ace', 'return_lost']);
 
 function computeScore(events, cfg) {
   const score = initialScore(cfg);
@@ -251,12 +272,17 @@ function computeStats(events) {
     secondServePointsWonPct: secondPlayed ? Math.round((secondWonCount / secondPlayed) * 100) : null,
     winners: c.winner || 0,
     unforcedErrors: c.unforced_error || 0,
+    forcedErrors: c.forced_error || 0,
     breakPointsWon: c.bp_saved || 0,
     breakPointsFaced: (c.bp_saved || 0) + (c.bp_lost || 0),
     netPointsWon: c.net_won || 0,
     netPointsTotal: (c.net_won || 0) + (c.net_lost || 0),
     ralliesUpTo4: c.rally_short || 0,
     ralliesOver4: c.rally_long || 0,
+    acesAgainst: c.opp_ace || 0,
+    doubleFaultsAgainst: c.opp_double_fault || 0,
+    returnPointsWon: c.return_won || 0,
+    returnPointsTotal: (c.return_won || 0) + (c.return_lost || 0),
     totalTaps: events.length,
   };
 }
@@ -457,19 +483,23 @@ function renderLiveScout(main, ctx, athletes, onExit) {
         statTile('Pontos de rede', `${stats.netPointsWon}/${stats.netPointsTotal}`),
         statTile('Rally até 4 trocas', stats.ralliesUpTo4),
         statTile('Rally acima de 4 trocas', stats.ralliesOver4),
+        statTile('Aces sofridos', stats.acesAgainst),
+        statTile('Duplas faltas do adversário', stats.doubleFaultsAgainst),
+        statTile('Pts de devolução', `${stats.returnPointsWon}/${stats.returnPointsTotal}`),
       ]),
     ]));
 
     function tap(type) { state.events.push(type); draw(); }
 
-    function groupCard(title, types) {
+    function groupCard(title, subtitle, types) {
       const counts = tally(state.events);
       return h('div', { class: 'card' }, [
-        h('h3', { style: 'margin-bottom:10px' }, [title]),
+        h('h3', { style: 'margin-bottom:2px' }, [title]),
+        subtitle ? h('p', { style: 'font-size:12px;color:var(--text-secondary);margin:0 0 10px' }, [subtitle]) : null,
         h('div', { class: 'scout-live-grid' }, types.map((type) => {
           const meta = TAP_TYPES[type];
           return h('button', {
-            type: 'button', class: `scout-tap-btn ${meta.variant}`, onClick: () => tap(type),
+            type: 'button', class: `scout-tap-btn ${meta.variant}${meta.detail ? ' detail' : ''}`, onClick: () => tap(type),
           }, [
             h('span', {}, [meta.label]),
             h('span', { class: 'count' }, [String(counts[type] || 0)]),
@@ -478,9 +508,26 @@ function renderLiveScout(main, ctx, athletes, onExit) {
       ]);
     }
 
-    main.appendChild(groupCard('Quando seu atleta está sacando', ['ace', 'first_won', 'first_lost', 'first_out', 'second_won', 'second_lost', 'double_fault']));
-    main.appendChild(groupCard('A qualquer momento do ponto', ['winner', 'unforced_error', 'net_won', 'net_lost', 'bp_saved', 'bp_lost']));
-    main.appendChild(groupCard('Duração do rally (ao final do ponto)', ['rally_short', 'rally_long']));
+    main.appendChild(groupCard(
+      'Quando seu atleta está sacando',
+      'Resultado do ponto — toque exatamente 1 botão por ponto, é ele que soma no placar.',
+      ['ace', 'first_won', 'first_lost', 'first_out', 'second_won', 'second_lost', 'double_fault'],
+    ));
+    main.appendChild(groupCard(
+      'Quando o adversário está sacando',
+      'Resultado do ponto — toque exatamente 1 botão por ponto, é ele que soma no placar.',
+      ['opp_ace', 'opp_double_fault', 'return_won', 'return_lost'],
+    ));
+    main.appendChild(groupCard(
+      'Detalhe do ponto (opcional)',
+      'Não altera o placar — só descreve o ponto que você acabou de marcar acima.',
+      ['winner', 'unforced_error', 'forced_error', 'net_won', 'net_lost', 'bp_saved', 'bp_lost'],
+    ));
+    main.appendChild(groupCard(
+      'Duração do rally (opcional)',
+      'Não altera o placar — só descreve o ponto que você acabou de marcar acima.',
+      ['rally_short', 'rally_long'],
+    ));
 
     main.appendChild(h('div', { class: 'form-actions' }, [
       h('button', {
