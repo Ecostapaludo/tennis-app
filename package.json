@@ -1,0 +1,16 @@
+{
+  "name": "tennis-coach-app",
+  "version": "1.0.0",
+  "description": "App para head coach de tenis: planejamento de treinos, avaliacoes, scout de jogos, analise de video e planos de treino com IA",
+  "type": "module",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "seed": "node db/seed.js"
+  },
+  "license": "UNLICENSED",
+  "dependencies": {}
+}

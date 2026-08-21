@@ -1,0 +1,9 @@
+node_modules/
+data/*.db
+data/*.db-*
+uploads/*
+!uploads/.gitkeep
+.env
+*.log
+.local/
+.DS_Store
