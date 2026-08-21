@@ -1,4 +1,4 @@
-import { h, clear, fmtDate } from '../dom.js';
+import { h, clear, fmtDate, confirmModal } from '../dom.js';
 import { api } from '../api.js';
 import { radarChart, lineChart } from '../components/charts.js';
 import { radarAxes, radarValues } from '../evalCriteria.js';
@@ -22,11 +22,20 @@ export async function renderAthletes(main, ctx) {
 
   const grid = h('div', { class: 'grid grid-3' });
   athletes.forEach((a) => {
-    const card = h('a', { class: 'card', href: `#/athletes/${a.id}`, style: 'display:block;text-decoration:none;cursor:pointer' }, [
-      h('h3', {}, [a.name]),
-      h('p', {}, [`${a.category || 'Sem categoria'}${a.gender ? ' · ' + GENDER_LABEL[a.gender] : ''} · ${a.dominant_hand || 'Sem info'}`]),
-      a.ranking_position ? h('p', {}, [`Ranking: #${a.ranking_position}`]) : null,
-      a.club ? h('p', {}, [a.club]) : null,
+    const card = h('div', { class: 'card' }, [
+      h('a', { href: `#/athletes/${a.id}`, style: 'display:block;text-decoration:none;color:inherit;cursor:pointer' }, [
+        h('h3', {}, [a.name]),
+        h('p', {}, [`${a.category || 'Sem categoria'}${a.gender ? ' · ' + GENDER_LABEL[a.gender] : ''} · ${a.dominant_hand || 'Sem info'}`]),
+        a.ranking_position ? h('p', {}, [`Ranking: #${a.ranking_position}`]) : null,
+        a.club ? h('p', {}, [a.club]) : null,
+      ]),
+      canEdit ? h('button', {
+        class: 'btn btn-sm btn-danger', type: 'button', style: 'margin-top:10px',
+        onClick: () => confirmModal(`Excluir ${a.name}? Isso remove também suas presenças, avaliações, jogos e análises registradas.`, async () => {
+          await api.del(`/api/athletes/${a.id}`);
+          renderAthletes(main, ctx);
+        }),
+      }, ['Excluir']) : null,
     ]);
     grid.appendChild(card);
   });
