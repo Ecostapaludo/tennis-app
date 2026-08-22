@@ -50,6 +50,8 @@ ensureColumn('matches', 'rallies_up_to_4', 'INTEGER');
 ensureColumn('matches', 'rallies_over_4', 'INTEGER');
 ensureColumn('matches', 'match_format', 'TEXT');
 ensureColumn('matches', 'opponent_athlete_id', 'INTEGER REFERENCES athletes(id) ON DELETE SET NULL');
+ensureColumn('stroke_video_analyses', 'serve_type', 'TEXT');
+ensureColumn('stroke_video_analyses', 'serve_confidence', 'REAL');
 
 export default db;
 export { dbPath };

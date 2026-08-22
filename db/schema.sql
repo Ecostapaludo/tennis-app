@@ -243,6 +243,8 @@ CREATE TABLE IF NOT EXISTS stroke_video_analyses (
   overall_score REAL,
   ai_comments TEXT,
   analysis_source TEXT NOT NULL DEFAULT 'simulado',
+  serve_type TEXT,
+  serve_confidence REAL,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

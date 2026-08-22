@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { classifyServeType } from './serveClassifier.js';
 
 // ---------------------------------------------------------------------------
 // MOTOR DE ANALISE BIOMECANICA DE VIDEO -- VERSAO SIMULADA
@@ -76,6 +77,24 @@ function scoreInRange(rand, min, max) {
   return Math.round((min + rand() * (max - min)) * 10) / 10;
 }
 
+const SERVE_TYPE_LABEL = { FLAT: 'Flat', SLICE: 'Slice', KICK: 'Kick', UNKNOWN: 'Indeterminado' };
+
+// Gera a cinematica de impacto do saque (posicao do toss, vetor de velocidade
+// da raquete, velocidade angular de pronacao/rotacao interna do ombro) usada
+// pelo classifyServeType real em serveClassifier.js. SIMULADA mas
+// deterministica, mesmo padrao do resto deste arquivo.
+// PONTO DE INTEGRACAO: numa integracao real essa cinematica viria de pose
+// estimation a partir do video (tracking do toss e da cabeca da raquete
+// quadro a quadro), nao de numeros sorteados.
+function simulatedServeKinematics(rand) {
+  return {
+    tossApexRelative: { x: -0.05 + rand() * 0.4, y: -0.05 + rand() * 0.6, z: rand() * 0.1 },
+    racketVelocityVector: { x: (rand() * 2 - 1) * 8, y: 15 + rand() * 20, z: (rand() * 2 - 1) * 15 + 10 },
+    pronationAngularVelocity: 700 + rand() * 1500,
+    shoulderInternalRotationSpeed: 600 + rand() * 1200,
+  };
+}
+
 export function analyzeStrokeVideo({ athleteId, strokeType, videoFilename, note }) {
   const seed = `${athleteId}:${strokeType}:${videoFilename || 'sem-arquivo'}:${note || ''}`;
   const rand = seededRandom(seed);
@@ -99,10 +118,22 @@ export function analyzeStrokeVideo({ athleteId, strokeType, videoFilename, note 
   const strongest = scored[scored.length - 1];
   const weakestTip = tips[Math.floor(rand() * tips.length)];
 
+  let serveType = null;
+  let serveConfidence = null;
+  let serveNote = '';
+  if (strokeType === 'serve') {
+    const classification = classifyServeType(simulatedServeKinematics(rand));
+    if (classification.serveType !== 'UNKNOWN') {
+      serveType = classification.serveType;
+      serveConfidence = Math.round(classification.confidenceScore * 100) / 100;
+      serveNote = ` Classificação do tipo de saque: ${SERVE_TYPE_LABEL[serveType]} (confiança ${Math.round(serveConfidence * 100)}%).`;
+    }
+  }
+
   const comments =
     `Analise simulada do golpe ${label}: o ponto mais forte identificado foi ${strongest.label.toLowerCase()} ` +
     `(${strongest.value}/10) e o ponto de maior oportunidade de evolucao foi ${weakest.label.toLowerCase()} ` +
-    `(${weakest.value}/10). Sugestao de foco no proximo ciclo de treino: trabalhar ${weakestTip}. ` +
+    `(${weakest.value}/10). Sugestao de foco no proximo ciclo de treino: trabalhar ${weakestTip}.${serveNote} ` +
     `[Esta e uma analise SIMULADA gerada para fins de demonstracao -- conecte um servico real de analise ` +
     `de video (pose estimation) em src/lib/videoAnalysis.js para obter metricas biomecanicas reais.]`;
 
@@ -114,5 +145,7 @@ export function analyzeStrokeVideo({ athleteId, strokeType, videoFilename, note 
     overallScore: overall,
     aiComments: comments,
     analysisSource: 'simulado',
+    serveType,
+    serveConfidence,
   };
 }
