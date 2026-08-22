@@ -113,7 +113,7 @@ p { margin: 0 0 8px; color: var(--text-secondary); }
 
 main.content {
   padding: 28px 34px 60px;
-  max-width: 1200px;
+  max-width: 1360px;
 }
 
 .page-header {
@@ -398,7 +398,7 @@ details[open] > summary .eval-cat-arrow { transform: rotate(90deg); }
 .modal-backdrop { position: fixed; inset: 0; background: rgba(11,11,11,0.4); display: flex; align-items: center; justify-content: center; z-index: 500; }
 .modal-box { background: var(--surface-card); border-radius: var(--radius-lg); padding: 24px; width: 460px; max-width: 92vw; max-height: 86vh; overflow-y: auto; }
 
-.calendar-layout { display: grid; grid-template-columns: 1fr 380px; gap: 20px; align-items: start; }
+.calendar-layout { display: grid; grid-template-columns: 1fr 560px; gap: 20px; align-items: start; }
 @media (max-width: 900px) { .calendar-layout { grid-template-columns: 1fr; } }
 
 .calendar-card { padding: 20px; }
