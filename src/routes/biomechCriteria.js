@@ -8,7 +8,10 @@ const STROKE_LABELS = {
   backhand_1h: 'Backhand (1 mão)',
   serve: 'Saque',
   volley: 'Voleio',
+  forehand_volley: 'Voleio de Forehand',
+  backhand_volley: 'Voleio de Backhand',
   smash: 'Smash',
+  smash_overhead: 'Smash (Overhead)',
 };
 
 function attachPhases(strokeType) {
