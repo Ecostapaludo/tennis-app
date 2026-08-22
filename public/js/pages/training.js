@@ -19,10 +19,34 @@ function addDays(dateStr, n) {
   return toISODate(d);
 }
 
+// So permite planejar a sessao com atletas de turmas que tem horario cadastrado
+// naquele dia da semana (turmas avulsas/"is_dropin" nao tem dia fixo, entao
+// ficam disponiveis todo dia). Retorna as turmas elegiveis e a uniao dos
+// atletas delas -- usado tanto na criacao quanto na edicao de uma sessao.
+function groupsAndAthletesForDate(dateStr, groups) {
+  const dayAbbrev = WEEKDAYS[new Date(`${dateStr}T00:00:00`).getDay()];
+  const groupsForDay = (groups || []).filter((g) => (
+    g.athletes && g.athletes.length
+    && (g.is_dropin || (g.scheduleSlots || []).some((s) => s.day === dayAbbrev))
+  ));
+  const athletesById = new Map();
+  groupsForDay.forEach((g) => g.athletes.forEach((a) => athletesById.set(a.id, a)));
+  return { groupsForDay, athletesForDay: Array.from(athletesById.values()).sort((a, b) => a.name.localeCompare(b.name)) };
+}
+
 // Checkbox de atletas + atalho "selecionar por turma", reutilizado tanto no
 // formulario de nova sessao quanto no modal de editar atletas de uma sessao
 // ja existente.
 function buildAthletePicker(athletes, groups, preselectedIds) {
+  if (!athletes.length) {
+    return {
+      el: h('p', { style: 'font-size:13px;color:var(--status-warning)' }, [
+        'Nenhuma turma tem horário cadastrado nesse dia da semana — cadastre um horário em Turmas, ou marque a turma como aula avulsa, para poder planejar uma sessão aqui.',
+      ]),
+      getSelectedIds: () => [],
+      size: () => 0,
+    };
+  }
   const checkedIds = new Set(preselectedIds || []);
   const athleteRefs = new Map();
   const tagList = h('div', { class: 'tag-list' }, athletes.map((a) => {
@@ -370,7 +394,15 @@ function buildSessionItem(s, athletes, groups, canEdit, onReload) {
 
 function openEditAthletesModal(session, athletes, groups, onReload) {
   const backdrop = h('div', { class: 'modal-backdrop' });
-  const athletePicker = buildAthletePicker(athletes, groups, (session.athletes || []).map((a) => a.id));
+  const { groupsForDay, athletesForDay } = groupsAndAthletesForDate(session.date, groups);
+  // Atletas ja vinculados a sessao continuam disponiveis mesmo se a turma deles
+  // nao tiver mais horario nesse dia (ex: horario da turma mudou depois que a
+  // sessao foi criada) -- assim editar a sessao nunca perde atleta ja marcado,
+  // so restringe quem pode ser ADICIONADO de novo.
+  const alreadyIn = session.athletes || [];
+  const pickerAthletes = [...athletesForDay, ...alreadyIn.filter((a) => !athletesForDay.some((x) => x.id === a.id))]
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const athletePicker = buildAthletePicker(pickerAthletes, groupsForDay, alreadyIn.map((a) => a.id));
   const errorBox = h('div', { class: 'error-msg' });
 
   const form = h('form', {
@@ -419,7 +451,8 @@ function buildAddForm(dateStr, athletes, groups, drills, role, weekFocusMap, onD
   const notes = h('textarea', { placeholder: 'Notas adicionais' });
   const errorBox = h('div', { class: 'error-msg' });
 
-  const athletePicker = buildAthletePicker(athletes, groups, []);
+  const { groupsForDay, athletesForDay } = groupsAndAthletesForDate(dateStr, groups);
+  const athletePicker = buildAthletePicker(athletesForDay, groupsForDay, []);
 
   const weekFocusEntry = weekFocusMap.get(mondayOfWeek(dateStr)) || null;
   const weekFocusCategory = weekFocusEntry ? weekFocusEntry.focusCategory : null;
