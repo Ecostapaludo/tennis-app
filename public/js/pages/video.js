@@ -106,10 +106,13 @@ function renderResult(wrap, analysis, strokeLabel) {
   clear(wrap);
   wrap.appendChild(h('div', { class: 'card' }, [
     h('h3', {}, [`Resultado da análise — ${strokeLabel}`]),
-    analysis.serveType ? h('p', { style: 'margin:-6px 0 10px' }, [
-      h('span', { class: 'badge badge-torneio' }, [
+    (analysis.serveType || analysis.impactFrameIndex != null) ? h('p', { style: 'margin:-6px 0 10px;display:flex;gap:6px;flex-wrap:wrap' }, [
+      analysis.serveType ? h('span', { class: 'badge badge-torneio' }, [
         `Tipo de saque: ${SERVE_TYPE_LABEL[analysis.serveType] || analysis.serveType} (confiança ${Math.round(analysis.serveConfidence * 100)}%)`,
-      ]),
+      ]) : null,
+      analysis.impactFrameIndex != null ? h('span', { class: 'badge badge-ranking' }, [
+        `Impacto: quadro ${analysis.impactFrameIndex} (t=${analysis.impactTimestampMs}ms) · confiança ${Math.round(analysis.impactConfidence * 100)}%`,
+      ]) : null,
     ]) : null,
     h('div', { class: 'grid grid-4', style: 'margin:12px 0' }, [
       scoreBlock('Técnica', analysis.techniqueScore),

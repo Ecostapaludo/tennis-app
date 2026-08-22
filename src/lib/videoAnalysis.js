@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { classifyServeType } from './serveClassifier.js';
 import { MediaPipeLandmarks, extractBiomechanicalFrameMetrics } from './poseAngles.js';
+import { detectImpactFrame } from './impactDetection.js';
 
 // ---------------------------------------------------------------------------
 // MOTOR DE ANALISE BIOMECANICA DE VIDEO -- VERSAO SIMULADA
@@ -137,6 +138,43 @@ function simulatedServeKinematics(rand) {
   };
 }
 
+const IMPACT_FPS = 60;
+
+// Gera uma serie temporal de posicoes do punho com um pico de velocidade
+// seguido de desaceleracao abrupta (o "jerk" que caracteriza o impacto da
+// bola) para exercitar o detectImpactFrame real. SIMULADA mas
+// deterministica -- ver PONTO DE INTEGRACAO em impactDetection.js.
+function simulatedImpactFrames(rand) {
+  const frameCount = 24 + Math.floor(rand() * 10); // 24 a 33 quadros
+  const impactIdx = 10 + Math.floor(rand() * (frameCount - 16));
+  const peakSpeed = 10 + rand() * 12;
+  const dt = 1 / IMPACT_FPS;
+
+  const velocities = [];
+  for (let i = 0; i < frameCount; i++) {
+    let v;
+    if (i <= impactIdx) {
+      const t = i / impactIdx;
+      v = peakSpeed * t * t; // aceleracao gradual ate o impacto
+    } else {
+      const t = (i - impactIdx) / (frameCount - impactIdx);
+      v = peakSpeed * Math.max(0, 1 - t * 3); // desaceleracao abrupta pos-impacto
+    }
+    velocities.push(Math.max(0, v + (rand() * 2 - 1) * 0.3));
+  }
+
+  let posY = 0;
+  const shoulder = { x: 0, y: 0.2, z: 1.3 };
+  const hip = { x: 0, y: 0, z: 0 };
+  const frames = velocities.map((v, i) => {
+    posY += v * dt;
+    const wrist = { x: 0.1 * Math.sin(i * 0.4), y: posY, z: 0.9 + Math.sin((i / frameCount) * Math.PI) * 0.3 };
+    return { frameIndex: i, timestampMs: Math.round((i / IMPACT_FPS) * 1000), wrist, shoulder, hip };
+  });
+
+  return frames;
+}
+
 export function analyzeStrokeVideo({ athleteId, strokeType, videoFilename, note }) {
   const seed = `${athleteId}:${strokeType}:${videoFilename || 'sem-arquivo'}:${note || ''}`;
   const rand = seededRandom(seed);
@@ -182,10 +220,19 @@ export function analyzeStrokeVideo({ athleteId, strokeType, videoFilename, note 
       `inclinação de ombros ${jointAngles.shoulderTilt}°.`
     : '';
 
+  // Deteccao do frame de impacto (t0) via pico de velocidade + desaceleracao
+  // abrupta do punho (impactDetection.js), sobre uma serie de frames SIMULADA.
+  const strokeCategory = (strokeType === 'serve' || strokeType === 'smash') ? 'SERVE_SMASH' : 'GROUNDSTROKE';
+  const impact = detectImpactFrame(simulatedImpactFrames(rand), strokeCategory, IMPACT_FPS);
+  const impactNote = impact
+    ? ` Frame de impacto detectado: quadro ${impact.impactFrameIndex} (t=${impact.impactTimestampMs}ms), ` +
+      `velocidade de pico ${impact.peakVelocity} un/s, confiança ${Math.round(impact.confidenceScore * 100)}%.`
+    : '';
+
   const comments =
     `Analise simulada do golpe ${label}: o ponto mais forte identificado foi ${strongest.label.toLowerCase()} ` +
     `(${strongest.value}/10) e o ponto de maior oportunidade de evolucao foi ${weakest.label.toLowerCase()} ` +
-    `(${weakest.value}/10). Sugestao de foco no proximo ciclo de treino: trabalhar ${weakestTip}.${serveNote}${jointAnglesNote} ` +
+    `(${weakest.value}/10). Sugestao de foco no proximo ciclo de treino: trabalhar ${weakestTip}.${serveNote}${jointAnglesNote}${impactNote} ` +
     `[Esta e uma analise SIMULADA gerada para fins de demonstracao -- conecte um servico real de analise ` +
     `de video (pose estimation) em src/lib/videoAnalysis.js para obter metricas biomecanicas reais.]`;
 
@@ -203,5 +250,9 @@ export function analyzeStrokeVideo({ athleteId, strokeType, videoFilename, note 
     elbowFlexion: jointAngles ? jointAngles.elbowFlexion : null,
     shoulderAbduction: jointAngles ? jointAngles.shoulderAbduction : null,
     shoulderTilt: jointAngles ? jointAngles.shoulderTilt : null,
+    impactFrameIndex: impact ? impact.impactFrameIndex : null,
+    impactTimestampMs: impact ? impact.impactTimestampMs : null,
+    impactConfidence: impact ? impact.confidenceScore : null,
+    peakVelocity: impact ? impact.peakVelocity : null,
   };
 }

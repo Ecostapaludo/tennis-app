@@ -249,6 +249,10 @@ CREATE TABLE IF NOT EXISTS stroke_video_analyses (
   elbow_flexion REAL,
   shoulder_abduction REAL,
   shoulder_tilt REAL,
+  impact_frame_index INTEGER,
+  impact_timestamp_ms REAL,
+  impact_confidence REAL,
+  peak_velocity REAL,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

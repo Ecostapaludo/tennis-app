@@ -56,6 +56,10 @@ ensureColumn('stroke_video_analyses', 'knee_flexion', 'REAL');
 ensureColumn('stroke_video_analyses', 'elbow_flexion', 'REAL');
 ensureColumn('stroke_video_analyses', 'shoulder_abduction', 'REAL');
 ensureColumn('stroke_video_analyses', 'shoulder_tilt', 'REAL');
+ensureColumn('stroke_video_analyses', 'impact_frame_index', 'INTEGER');
+ensureColumn('stroke_video_analyses', 'impact_timestamp_ms', 'REAL');
+ensureColumn('stroke_video_analyses', 'impact_confidence', 'REAL');
+ensureColumn('stroke_video_analyses', 'peak_velocity', 'REAL');
 
 export default db;
 export { dbPath };
