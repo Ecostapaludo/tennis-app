@@ -9,6 +9,7 @@ export async function renderVideo(main, ctx) {
 
   main.appendChild(h('div', { class: 'page-header' }, [
     h('div', {}, [h('h1', {}, ['Análise de vídeo']), h('p', {}, ['Upload de vídeo de golpe e análise biomecânica.'])]),
+    h('a', { class: 'btn btn-sm', href: '#/biomech' }, ['📐 Base biomecânica']),
   ]));
 
   main.appendChild(h('div', { class: 'notice-banner' }, [

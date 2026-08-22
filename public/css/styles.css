@@ -237,6 +237,9 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .badge-torneio { background: color-mix(in srgb, var(--series-1) 20%, transparent); color: var(--series-1); }
 .badge-treino { background: color-mix(in srgb, var(--status-warning) 20%, transparent); color: var(--status-warning); }
 .badge-ranking { background: color-mix(in srgb, var(--series-7) 20%, transparent); color: var(--series-7); }
+.badge-critical { background: color-mix(in srgb, var(--status-critical) 20%, transparent); color: var(--status-critical); }
+.badge-warning { background: color-mix(in srgb, var(--status-warning) 20%, transparent); color: var(--status-warning); }
+.badge-low { background: color-mix(in srgb, var(--status-good) 20%, transparent); color: var(--status-good); }
 
 .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
 .form-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }

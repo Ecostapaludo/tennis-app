@@ -287,6 +287,38 @@ CREATE TABLE IF NOT EXISTS tournament_athletes (
   PRIMARY KEY (tournament_id, athlete_id)
 );
 
+-- Base biomecanica de referencia: para cada golpe (forehand, backhand, saque...),
+-- o head coach cadastra as fases do movimento e, dentro de cada fase, os
+-- marcadores biomecanicos esperados (angulos-alvo, criticidade, indicador de
+-- erro). Essa e a "regua" usada para comparar o video do aluno -- nao guarda
+-- nenhum video de terceiros, so o conhecimento tecnico digitado/importado.
+CREATE TABLE IF NOT EXISTS biomech_models (
+  stroke_type TEXT PRIMARY KEY,
+  model_version TEXT NOT NULL,
+  updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS biomech_phases (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  stroke_type TEXT NOT NULL REFERENCES biomech_models(stroke_type) ON DELETE CASCADE,
+  phase_order INTEGER NOT NULL,
+  phase_name TEXT NOT NULL,
+  timeframe TEXT
+);
+
+CREATE TABLE IF NOT EXISTS biomech_markers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  phase_id INTEGER NOT NULL REFERENCES biomech_phases(id) ON DELETE CASCADE,
+  marker_order INTEGER NOT NULL,
+  marker_key TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  target_range TEXT,
+  criticality TEXT,
+  fault_indicator TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_sessions_date ON training_sessions(date);
 CREATE INDEX IF NOT EXISTS idx_evaluations_athlete_date ON evaluations(athlete_id, date);
 CREATE INDEX IF NOT EXISTS idx_matches_athlete_date ON matches(athlete_id, date);
@@ -297,3 +329,5 @@ CREATE INDEX IF NOT EXISTS idx_group_members_athlete ON athlete_group_members(at
 CREATE INDEX IF NOT EXISTS idx_drills_focus ON drills(focus_category);
 CREATE INDEX IF NOT EXISTS idx_session_drills_drill ON training_session_drills(drill_id);
 CREATE INDEX IF NOT EXISTS idx_plan_athletes_athlete ON training_plan_athletes(athlete_id);
+CREATE INDEX IF NOT EXISTS idx_biomech_phases_stroke ON biomech_phases(stroke_type);
+CREATE INDEX IF NOT EXISTS idx_biomech_markers_phase ON biomech_markers(phase_id);

@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { route: 'evaluations', label: 'Avaliações', icon: '🎾', roles: ['head_coach', 'responsavel'] },
   { route: 'matches', label: 'Scout de jogos', icon: '🎾', roles: ['head_coach', 'responsavel'] },
   { route: 'video', label: 'Análise de vídeo', icon: '🎾', roles: ['head_coach'] },
+  { route: 'biomech', label: 'Base biomecânica', icon: '🎾', roles: ['head_coach', 'treinador'] },
   { route: 'reports', label: 'Relatórios', icon: '🎾', roles: ['head_coach'] },
   { route: 'training-plan', label: 'Plano de treino IA', icon: '🎾', roles: ['head_coach'] },
   { route: 'users', label: 'Usuários', icon: '🎾', roles: ['head_coach'] },

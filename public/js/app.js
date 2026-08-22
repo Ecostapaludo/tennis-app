@@ -12,6 +12,7 @@ import { renderDrills } from './pages/drills.js';
 import { renderEvaluations } from './pages/evaluations.js';
 import { renderMatches } from './pages/matches.js';
 import { renderVideo } from './pages/video.js';
+import { renderBiomech } from './pages/biomech.js';
 import { renderReports } from './pages/reports.js';
 import { renderTrainingPlan } from './pages/trainingPlan.js';
 import { renderUsers } from './pages/users.js';
@@ -66,6 +67,7 @@ const PAGES = {
   evaluations: { title: 'Avaliações de desempenho', render: renderEvaluations },
   matches: { title: 'Scout de jogos', render: renderMatches },
   video: { title: 'Análise de vídeo', render: renderVideo },
+  biomech: { title: 'Base biomecânica', render: renderBiomech },
   reports: { title: 'Relatórios e evolução', render: renderReports },
   'training-plan': { title: 'Plano de treino com IA', render: renderTrainingPlan },
   users: { title: 'Usuários e permissões', render: renderUsers },

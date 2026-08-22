@@ -77,7 +77,7 @@ export function parseCookies(req) {
 const READ_ONLY_METHODS = new Set(['GET', 'HEAD']);
 
 // Recursos que 'treinador' pode LER
-const TREINADOR_READ_RESOURCES = ['training-sessions', 'athletes', 'dashboard', 'drills', 'groups', 'weekly-focus', 'tournaments'];
+const TREINADOR_READ_RESOURCES = ['training-sessions', 'athletes', 'dashboard', 'drills', 'groups', 'weekly-focus', 'tournaments', 'biomech-criteria'];
 // Recursos que 'treinador' pode CRIAR/EDITAR/EXCLUIR (sujeito a regras extras, ex: foco da semana)
 const TREINADOR_WRITE_RESOURCES = ['training-sessions'];
 // Recursos que 'responsavel' pode LER (sempre filtrados pelos athleteIds vinculados)
