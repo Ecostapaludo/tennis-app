@@ -69,16 +69,20 @@ export async function renderAttendance(main, ctx) {
     clear(listWrap);
     const todayStr = toISODate(new Date());
     const isPending = (s) => (s.athletes || []).some((a) => !a.attendance || a.attendance === 'previsto');
-    let list = sessions.filter((s) => (s.athletes || []).length);
+    // Sessoes sem nenhum atleta vinculado continuam aparecendo (exceto no filtro
+    // "pendentes", onde nao ha nada a confirmar) -- antes elas eram escondidas em
+    // todos os filtros, o que fazia a tela parecer vazia/quebrada mesmo com
+    // turmas e sessoes cadastradas, sem nenhuma explicacao para o treinador.
+    let list = sessions;
     if (state.filter === 'today') list = list.filter((s) => s.date.slice(0, 10) === todayStr);
     else if (state.filter === 'pending') list = list.filter(isPending);
     else if (state.filter === 'upcoming') list = list.filter((s) => s.date.slice(0, 10) >= todayStr);
     list = list.slice().sort((a, b) => a.date.localeCompare(b.date) || (a.start_time || '').localeCompare(b.start_time || ''));
 
     if (!list.length) {
-      const emptyMsg = state.filter === 'today' ? 'Nenhuma sessão com atletas hoje.'
+      const emptyMsg = state.filter === 'today' ? 'Nenhuma sessão hoje.'
         : state.filter === 'pending' ? 'Nenhuma sessão pendente de confirmação.'
-        : 'Nenhuma sessão com atletas nesse período.';
+        : 'Nenhuma sessão nesse período.';
       listWrap.appendChild(h('div', { class: 'card' }, [h('div', { class: 'empty-state' }, [emptyMsg])]));
       return;
     }
@@ -103,6 +107,15 @@ function buildSessionCard(session, onReload, canManage) {
       h('span', { class: 'badge badge-neutral' }, [`${confirmedCount}/${session.athletes.length} presentes`]),
     ]),
   ]));
+
+  if (!session.athletes.length) {
+    card.appendChild(h('p', { style: 'font-size:13px;color:var(--status-warning)' }, [
+      canManage
+        ? '⚠ Nenhum atleta vinculado a esta sessão — vá em Planejamento de treinos → Editar atletas para adicionar os participantes e poder confirmar presença.'
+        : '⚠ Nenhum atleta vinculado a esta sessão.',
+    ]));
+    return card;
+  }
 
   if (canManage && isFuture) {
     card.appendChild(h('p', { style: 'font-size:12px;color:var(--text-muted);margin:-4px 0 10px' }, [

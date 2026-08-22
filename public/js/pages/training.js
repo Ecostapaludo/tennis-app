@@ -19,6 +19,50 @@ function addDays(dateStr, n) {
   return toISODate(d);
 }
 
+// Checkbox de atletas + atalho "selecionar por turma", reutilizado tanto no
+// formulario de nova sessao quanto no modal de editar atletas de uma sessao
+// ja existente.
+function buildAthletePicker(athletes, groups, preselectedIds) {
+  const checkedIds = new Set(preselectedIds || []);
+  const athleteRefs = new Map();
+  const tagList = h('div', { class: 'tag-list' }, athletes.map((a) => {
+    const cb = h('input', {
+      type: 'checkbox', checked: checkedIds.has(a.id),
+      onChange: (e) => { if (e.target.checked) checkedIds.add(a.id); else checkedIds.delete(a.id); label.classList.toggle('checked', e.target.checked); },
+    });
+    const label = h('label', { class: `tag-checkbox${checkedIds.has(a.id) ? ' checked' : ''}` }, [cb, a.name]);
+    athleteRefs.set(a.id, { cb, label });
+    return label;
+  }));
+
+  function setAthleteChecked(id, checked) {
+    if (checked) checkedIds.add(id); else checkedIds.delete(id);
+    const ref = athleteRefs.get(id);
+    if (ref) { ref.cb.checked = checked; ref.label.classList.toggle('checked', checked); }
+  }
+
+  const groupsWithMembers = (groups || []).filter((g) => g.athletes && g.athletes.length);
+  const chipRow = groupsWithMembers.length
+    ? h('div', { class: 'chip-row', style: 'margin-bottom:12px' }, groupsWithMembers.map((g) => {
+        const isSelected = () => g.athletes.every((a) => checkedIds.has(a.id));
+        const chip = h('button', { type: 'button', class: `chip${isSelected() ? ' active' : ''}` }, [`${g.name} (${g.athletes.length})`]);
+        chip.addEventListener('click', () => {
+          const shouldSelect = !isSelected();
+          g.athletes.forEach((a) => setAthleteChecked(a.id, shouldSelect));
+          chip.classList.toggle('active', shouldSelect);
+        });
+        return chip;
+      }))
+    : null;
+
+  const el = h('div', {}, [
+    chipRow ? h('div', { class: 'form-field', style: 'margin-bottom:10px' }, [h('label', {}, ['Selecionar por turma']), chipRow]) : null,
+    athletes.length ? h('div', { class: 'form-field' }, [h('label', {}, ['Atletas participantes']), tagList]) : null,
+  ]);
+
+  return { el, getSelectedIds: () => Array.from(checkedIds), size: () => checkedIds.size };
+}
+
 function mondayOfWeek(dateStr) {
   const d = new Date(`${dateStr}T00:00:00`);
   const day = d.getDay();
@@ -273,7 +317,7 @@ function buildDayPanel(state, byDate, athletes, groups, drills, role, canEdit, w
   if (!daySessions.length) {
     panel.appendChild(h('div', { class: 'empty-state', style: 'padding:20px 0' }, ['Nenhuma sessão neste dia.']));
   } else {
-    daySessions.forEach((s) => panel.appendChild(buildSessionItem(s, canEdit, onReload)));
+    daySessions.forEach((s) => panel.appendChild(buildSessionItem(s, athletes, groups, canEdit, onReload)));
   }
 
   if (canEdit) {
@@ -283,9 +327,10 @@ function buildDayPanel(state, byDate, athletes, groups, drills, role, canEdit, w
   return panel;
 }
 
-function buildSessionItem(s, canEdit, onReload) {
+function buildSessionItem(s, athletes, groups, canEdit, onReload) {
   const drillsByCat = { technical: [], physical: [], tactical: [], mental: [] };
   (s.drills || []).forEach((d) => { if (drillsByCat[d.focus_category]) drillsByCat[d.focus_category].push(d); });
+  const hasAthletes = s.athletes && s.athletes.length;
 
   return h('div', { class: 'session-item' }, [
     h('div', { class: 'page-header', style: 'margin-bottom:6px' }, [
@@ -295,6 +340,12 @@ function buildSessionItem(s, canEdit, onReload) {
       ]),
       h('div', {}, [
         h('span', { class: 'badge badge-neutral' }, [s.status]),
+        canEdit
+          ? h('button', {
+              class: 'btn btn-sm', style: 'margin-left:8px', type: 'button',
+              onClick: () => openEditAthletesModal(s, athletes, groups, onReload),
+            }, ['Editar atletas'])
+          : null,
         canEdit
           ? h('button', {
               class: 'btn btn-sm btn-danger', style: 'margin-left:8px', type: 'button',
@@ -308,9 +359,42 @@ function buildSessionItem(s, canEdit, onReload) {
     focusLine('Físico', s.focus_physical, drillsByCat.physical),
     focusLine('Tático', s.focus_tactical, drillsByCat.tactical),
     focusLine('Mental', s.focus_mental, drillsByCat.mental),
-    s.athletes && s.athletes.length ? h('p', {}, [h('strong', {}, ['Atletas: ']), s.athletes.map((a) => a.name).join(', ')]) : null,
+    hasAthletes
+      ? h('p', {}, [h('strong', {}, ['Atletas: ']), s.athletes.map((a) => a.name).join(', ')])
+      : h('p', { style: 'color:var(--status-warning)' }, [
+          '⚠ Nenhum atleta vinculado a esta sessão — a confirmação de presença não vai aparecer até você adicionar atletas em "Editar atletas".',
+        ]),
     s.notes ? h('p', {}, [h('strong', {}, ['Notas: ']), s.notes]) : null,
   ]);
+}
+
+function openEditAthletesModal(session, athletes, groups, onReload) {
+  const backdrop = h('div', { class: 'modal-backdrop' });
+  const athletePicker = buildAthletePicker(athletes, groups, (session.athletes || []).map((a) => a.id));
+  const errorBox = h('div', { class: 'error-msg' });
+
+  const form = h('form', {
+    onSubmit: async (e) => {
+      e.preventDefault();
+      try {
+        await api.put(`/api/training-sessions/${session.id}`, { athleteIds: athletePicker.getSelectedIds() });
+        backdrop.remove();
+        onReload();
+      } catch (err) { errorBox.textContent = err.message; }
+    },
+  }, [
+    h('h2', {}, [`Editar atletas — ${session.title}`]),
+    h('div', { style: 'margin-top:12px' }, [athletePicker.el]),
+    errorBox,
+    h('div', { class: 'form-actions' }, [
+      h('button', { class: 'btn', type: 'button', onClick: () => backdrop.remove() }, ['Cancelar']),
+      h('button', { class: 'btn btn-primary', type: 'submit' }, ['Salvar']),
+    ]),
+  ]);
+
+  backdrop.appendChild(h('div', { class: 'modal-box' }, [form]));
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
+  document.body.appendChild(backdrop);
 }
 
 function focusLine(label, value, focusDrills) {
@@ -335,20 +419,7 @@ function buildAddForm(dateStr, athletes, groups, drills, role, weekFocusMap, onD
   const notes = h('textarea', { placeholder: 'Notas adicionais' });
   const errorBox = h('div', { class: 'error-msg' });
 
-  const checkedIds = new Set();
-  const athleteRefs = new Map();
-  const tagList = h('div', { class: 'tag-list' }, athletes.map((a) => {
-    const cb = h('input', { type: 'checkbox', onChange: (e) => { if (e.target.checked) checkedIds.add(a.id); else checkedIds.delete(a.id); label.classList.toggle('checked', e.target.checked); } });
-    const label = h('label', { class: 'tag-checkbox' }, [cb, a.name]);
-    athleteRefs.set(a.id, { cb, label });
-    return label;
-  }));
-
-  function setAthleteChecked(id, checked) {
-    if (checked) checkedIds.add(id); else checkedIds.delete(id);
-    const ref = athleteRefs.get(id);
-    if (ref) { ref.cb.checked = checked; ref.label.classList.toggle('checked', checked); }
-  }
+  const athletePicker = buildAthletePicker(athletes, groups, []);
 
   const weekFocusEntry = weekFocusMap.get(mondayOfWeek(dateStr)) || null;
   const weekFocusCategory = weekFocusEntry ? weekFocusEntry.focusCategory : null;
@@ -412,33 +483,21 @@ function buildAddForm(dateStr, athletes, groups, drills, role, weekFocusMap, onD
     return h('div', {}, [summary, openBtn]);
   }
 
-  const groupsWithMembers = (groups || []).filter((g) => g.athletes && g.athletes.length);
-  const chipRow = groupsWithMembers.length
-    ? h('div', { class: 'chip-row', style: 'margin-bottom:12px' }, groupsWithMembers.map((g) => {
-        const isSelected = () => g.athletes.every((a) => checkedIds.has(a.id));
-        const chip = h('button', {
-          type: 'button', class: `chip${isSelected() ? ' active' : ''}`,
-        }, [`${g.name} (${g.athletes.length})`]);
-        chip.addEventListener('click', () => {
-          const shouldSelect = !isSelected();
-          g.athletes.forEach((a) => setAthleteChecked(a.id, shouldSelect));
-          chip.classList.toggle('active', shouldSelect);
-        });
-        return chip;
-      }))
-    : null;
-
   const form = h('form', {
     class: 'inline-session-form',
     onSubmit: async (e) => {
       e.preventDefault();
+      if (!athletePicker.size()) {
+        errorBox.textContent = 'Selecione ao menos um atleta (ou uma turma) para esta sessão — sem isso não é possível confirmar presença depois.';
+        return;
+      }
       try {
         await api.post('/api/training-sessions', {
           date: dateStr, startTime: startTime.value || null, endTime: endTime.value || null,
           title: title.value, objective: objective.value || null,
           focusTechnical: focusTechnical.value || null, focusPhysical: focusPhysical.value || null,
           focusTactical: focusTactical.value || null, focusMental: focusMental.value || null,
-          notes: notes.value || null, athleteIds: Array.from(checkedIds), drillIds: Array.from(selectedDrillIds),
+          notes: notes.value || null, athleteIds: athletePicker.getSelectedIds(), drillIds: Array.from(selectedDrillIds),
         });
         onDone();
       } catch (err) { errorBox.textContent = err.message; }
@@ -456,8 +515,7 @@ function buildAddForm(dateStr, athletes, groups, drills, role, weekFocusMap, onD
       h('div', { class: 'form-field' }, [h('label', {}, ['Foco mental']), focusMental, drillFieldFor('mental')]),
       h('div', { class: 'form-field span-2' }, [h('label', {}, ['Notas']), notes]),
     ]),
-    chipRow ? h('div', { class: 'form-field', style: 'margin-top:10px' }, [h('label', {}, ['Selecionar por turma']), chipRow]) : null,
-    athletes.length ? h('div', { class: 'form-field', style: 'margin-top:10px' }, [h('label', {}, ['Atletas participantes']), tagList]) : null,
+    h('div', { style: 'margin-top:10px' }, [athletePicker.el]),
     errorBox,
     h('div', { class: 'form-actions' }, [
       h('button', { class: 'btn btn-primary', type: 'submit' }, ['Salvar sessão']),
