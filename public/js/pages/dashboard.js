@@ -29,6 +29,24 @@ function groupColorMap(groups) {
   return map;
 }
 
+// Agrupa horas em sequencias continuas (ex: [15,16,17] -> [[15,17]]) para o
+// resumo da turma da semana poder mostrar "15:00 às 17:00" em vez de 3 linhas
+// separadas. Horas com furo (ex: [15,17]) viram 2 intervalos de 1 hora cada.
+function hourRanges(hours) {
+  const sorted = Array.from(new Set(hours)).sort((a, b) => a - b);
+  const ranges = [];
+  let start = null;
+  let prev = null;
+  sorted.forEach((h) => {
+    if (start === null) { start = h; prev = h; return; }
+    if (h === prev + 1) { prev = h; return; }
+    ranges.push([start, prev]);
+    start = h; prev = h;
+  });
+  if (start !== null) ranges.push([start, prev]);
+  return ranges;
+}
+
 // Mostra as turmas da semana (segunda a domingo), dia a dia, ordenadas por horario —
 // a partir do horario fixo cadastrado em cada turma (ver Turmas), nao de sessoes avulsas.
 function buildWeekCard(groups) {
@@ -44,11 +62,19 @@ function buildWeekCard(groups) {
   const entriesByDay = {};
   WEEKDAY_NAMES.forEach((day) => { entriesByDay[day] = []; });
   groups.forEach((g) => {
+    const hoursByDay = {};
     (g.scheduleSlots || []).forEach((slot) => {
-      if (entriesByDay[slot.day]) entriesByDay[slot.day].push({ hour: slot.hour, group: g });
+      if (!(slot.day in entriesByDay)) return;
+      if (!hoursByDay[slot.day]) hoursByDay[slot.day] = [];
+      hoursByDay[slot.day].push(slot.hour);
+    });
+    Object.entries(hoursByDay).forEach(([day, hours]) => {
+      hourRanges(hours).forEach(([startHour, endHour]) => {
+        entriesByDay[day].push({ startHour, endHour, group: g });
+      });
     });
   });
-  Object.values(entriesByDay).forEach((list) => list.sort((a, b) => a.hour - b.hour));
+  Object.values(entriesByDay).forEach((list) => list.sort((a, b) => a.startHour - b.startHour));
 
   const dropinGroups = groups.filter((g) => g.is_dropin);
 
@@ -66,9 +92,12 @@ function buildWeekCard(groups) {
     if (!dayEntries.length) {
       dayCell.appendChild(h('p', { class: 'dash-week-empty' }, ['—']));
     } else {
-      dayEntries.forEach(({ hour, group }) => {
+      dayEntries.forEach(({ startHour, endHour, group }) => {
+        const timeLabel = startHour === endHour
+          ? `${String(startHour).padStart(2, '0')}:00`
+          : `${String(startHour).padStart(2, '0')}:00 às ${String(endHour).padStart(2, '0')}:00`;
         dayCell.appendChild(h('div', { class: 'dash-week-session' }, [
-          h('span', { class: 'dash-week-time', style: `color:${colorOf.get(group.id)}` }, [`${String(hour).padStart(2, '0')}:00`]),
+          h('span', { class: 'dash-week-time', style: `color:${colorOf.get(group.id)}` }, [timeLabel]),
           h('div', { class: 'dash-week-session-title' }, [group.name]),
         ]));
       });
