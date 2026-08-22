@@ -117,6 +117,15 @@ function renderResult(wrap, analysis, strokeLabel) {
       scoreBlock('Consistência', analysis.consistencyScore),
       scoreBlock('Equilíbrio', analysis.balanceScore),
     ]),
+    analysis.kneeFlexion != null ? h('div', { style: 'margin-bottom:12px' }, [
+      h('p', { style: 'font-size:12px;color:var(--text-secondary);margin:0 0 6px' }, ['Ângulos articulares (frame analisado)']),
+      h('div', { class: 'grid grid-4' }, [
+        angleBlock('Joelho', analysis.kneeFlexion),
+        angleBlock('Cotovelo', analysis.elbowFlexion),
+        angleBlock('Abdução ombro', analysis.shoulderAbduction),
+        angleBlock('Inclinação ombros', analysis.shoulderTilt),
+      ]),
+    ]) : null,
     h('p', { class: 'video-note' }, [analysis.aiComments]),
   ]));
 }
@@ -124,5 +133,11 @@ function scoreBlock(label, val) {
   return h('div', {}, [
     h('div', { style: 'font-size:12px;color:var(--text-secondary)' }, [label]),
     h('span', { class: `score-pill ${scoreClass(val)}` }, [val]),
+  ]);
+}
+function angleBlock(label, val) {
+  return h('div', {}, [
+    h('div', { style: 'font-size:12px;color:var(--text-secondary)' }, [label]),
+    h('span', { class: 'score-pill score-mid' }, [`${val}°`]),
   ]);
 }

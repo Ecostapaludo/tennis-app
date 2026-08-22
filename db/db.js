@@ -52,6 +52,10 @@ ensureColumn('matches', 'match_format', 'TEXT');
 ensureColumn('matches', 'opponent_athlete_id', 'INTEGER REFERENCES athletes(id) ON DELETE SET NULL');
 ensureColumn('stroke_video_analyses', 'serve_type', 'TEXT');
 ensureColumn('stroke_video_analyses', 'serve_confidence', 'REAL');
+ensureColumn('stroke_video_analyses', 'knee_flexion', 'REAL');
+ensureColumn('stroke_video_analyses', 'elbow_flexion', 'REAL');
+ensureColumn('stroke_video_analyses', 'shoulder_abduction', 'REAL');
+ensureColumn('stroke_video_analyses', 'shoulder_tilt', 'REAL');
 
 export default db;
 export { dbPath };

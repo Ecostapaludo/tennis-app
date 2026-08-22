@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { classifyServeType } from './serveClassifier.js';
+import { MediaPipeLandmarks, extractBiomechanicalFrameMetrics } from './poseAngles.js';
 
 // ---------------------------------------------------------------------------
 // MOTOR DE ANALISE BIOMECANICA DE VIDEO -- VERSAO SIMULADA
@@ -86,6 +87,47 @@ const SERVE_TYPE_LABEL = { FLAT: 'Flat', SLICE: 'Slice', KICK: 'Kick', UNKNOWN: 
 // PONTO DE INTEGRACAO: numa integracao real essa cinematica viria de pose
 // estimation a partir do video (tracking do toss e da cabeca da raquete
 // quadro a quadro), nao de numeros sorteados.
+// Landmark simulado: ponto-base + variacao aleatoria (mesmo padrao "seeded"
+// do resto do arquivo), imitando a variabilidade de um keypoint real do
+// MediaPipe Pose.
+function randomLandmark(rand, base, spread) {
+  return {
+    x: base.x + (rand() * 2 - 1) * spread,
+    y: base.y + (rand() * 2 - 1) * spread,
+    z: base.z + (rand() * 2 - 1) * spread * 0.4,
+    visibility: 0.8 + rand() * 0.2,
+  };
+}
+
+// Monta um array de 33 landmarks (indices do MediaPipe Pose) com proporcoes
+// aproximadas de um corpo humano parado em posicao de saque/golpe, so
+// preenchendo os pontos que extractBiomechanicalFrameMetrics realmente le.
+// PONTO DE INTEGRACAO: substituir por landmarks reais vindos do MediaPipe
+// Pose Landmarker rodando sobre um frame do video enviado.
+function simulatedPoseLandmarks(rand, dominantSide) {
+  const isRight = dominantSide === 'RIGHT';
+  const landmarks = new Array(33).fill(null).map(() => ({ x: 0, y: 0, z: 0, visibility: 0 }));
+  const L = MediaPipeLandmarks;
+
+  const hip = randomLandmark(rand, { x: 0, y: 0, z: 0 }, 0.05);
+  const knee = randomLandmark(rand, { x: 0.05, y: -0.9, z: 0 }, 0.15);
+  const ankle = randomLandmark(rand, { x: 0, y: -1.8, z: 0 }, 0.3);
+  const shoulder = randomLandmark(rand, { x: 0, y: 1.3, z: 0 }, 0.1);
+  const elbow = randomLandmark(rand, { x: 0.35, y: 0.9, z: 0.1 }, 0.25);
+  const wrist = randomLandmark(rand, { x: 0.6, y: 0.5, z: 0.2 }, 0.35);
+  const oppositeShoulder = randomLandmark(rand, { x: -0.35, y: 1.3, z: 0 }, 0.05);
+
+  landmarks[isRight ? L.RIGHT_HIP : L.LEFT_HIP] = hip;
+  landmarks[isRight ? L.RIGHT_KNEE : L.LEFT_KNEE] = knee;
+  landmarks[isRight ? L.RIGHT_ANKLE : L.LEFT_ANKLE] = ankle;
+  landmarks[isRight ? L.RIGHT_SHOULDER : L.LEFT_SHOULDER] = shoulder;
+  landmarks[isRight ? L.RIGHT_ELBOW : L.LEFT_ELBOW] = elbow;
+  landmarks[isRight ? L.RIGHT_WRIST : L.LEFT_WRIST] = wrist;
+  landmarks[isRight ? L.LEFT_SHOULDER : L.RIGHT_SHOULDER] = oppositeShoulder;
+
+  return landmarks;
+}
+
 function simulatedServeKinematics(rand) {
   return {
     tossApexRelative: { x: -0.05 + rand() * 0.4, y: -0.05 + rand() * 0.6, z: rand() * 0.1 },
@@ -130,10 +172,20 @@ export function analyzeStrokeVideo({ athleteId, strokeType, videoFilename, note 
     }
   }
 
+  // Angulos articulares (joelho/cotovelo/ombro) extraidos via algebra vetorial
+  // real (poseAngles.js) a partir de landmarks -- SIMULADOS por enquanto, ver
+  // PONTO DE INTEGRACAO em simulatedPoseLandmarks acima.
+  const jointAngles = extractBiomechanicalFrameMetrics(simulatedPoseLandmarks(rand, 'RIGHT'), 'RIGHT');
+  const jointAnglesNote = jointAngles
+    ? ` Ângulos articulares estimados no frame analisado: joelho ${jointAngles.kneeFlexion}°, ` +
+      `cotovelo ${jointAngles.elbowFlexion}°, abdução de ombro ${jointAngles.shoulderAbduction}°, ` +
+      `inclinação de ombros ${jointAngles.shoulderTilt}°.`
+    : '';
+
   const comments =
     `Analise simulada do golpe ${label}: o ponto mais forte identificado foi ${strongest.label.toLowerCase()} ` +
     `(${strongest.value}/10) e o ponto de maior oportunidade de evolucao foi ${weakest.label.toLowerCase()} ` +
-    `(${weakest.value}/10). Sugestao de foco no proximo ciclo de treino: trabalhar ${weakestTip}.${serveNote} ` +
+    `(${weakest.value}/10). Sugestao de foco no proximo ciclo de treino: trabalhar ${weakestTip}.${serveNote}${jointAnglesNote} ` +
     `[Esta e uma analise SIMULADA gerada para fins de demonstracao -- conecte um servico real de analise ` +
     `de video (pose estimation) em src/lib/videoAnalysis.js para obter metricas biomecanicas reais.]`;
 
@@ -147,5 +199,9 @@ export function analyzeStrokeVideo({ athleteId, strokeType, videoFilename, note 
     analysisSource: 'simulado',
     serveType,
     serveConfidence,
+    kneeFlexion: jointAngles ? jointAngles.kneeFlexion : null,
+    elbowFlexion: jointAngles ? jointAngles.elbowFlexion : null,
+    shoulderAbduction: jointAngles ? jointAngles.shoulderAbduction : null,
+    shoulderTilt: jointAngles ? jointAngles.shoulderTilt : null,
   };
 }

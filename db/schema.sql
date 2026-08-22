@@ -245,6 +245,10 @@ CREATE TABLE IF NOT EXISTS stroke_video_analyses (
   analysis_source TEXT NOT NULL DEFAULT 'simulado',
   serve_type TEXT,
   serve_confidence REAL,
+  knee_flexion REAL,
+  elbow_flexion REAL,
+  shoulder_abduction REAL,
+  shoulder_tilt REAL,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
