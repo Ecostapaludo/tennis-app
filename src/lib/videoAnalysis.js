@@ -161,7 +161,10 @@ function simulatedPoseLandmarks(rand, dominantSide) {
 
 function simulatedServeKinematics(rand) {
   return {
-    tossApexRelative: { x: -0.05 + rand() * 0.4, y: -0.05 + rand() * 0.6, z: rand() * 0.1 },
+    // y vai de -0.15 (toss atrasado, atras da cabeca) a 0.55 (bem a frente) --
+    // faixa alargada para permitir ocasionalmente disparar a regra de "toss
+    // atrasado" do motor de saque (biomechReport/serveRuleEngine.js).
+    tossApexRelative: { x: -0.05 + rand() * 0.4, y: -0.15 + rand() * 0.7, z: rand() * 0.1 },
     racketVelocityVector: { x: (rand() * 2 - 1) * 8, y: 15 + rand() * 20, z: (rand() * 2 - 1) * 15 + 10 },
     pronationAngularVelocity: 700 + rand() * 1500,
     shoulderInternalRotationSpeed: 600 + rand() * 1200,
@@ -231,8 +234,10 @@ export function analyzeStrokeVideo({ athleteId, strokeType, videoFilename, note 
   let serveType = null;
   let serveConfidence = null;
   let serveNote = '';
+  let serveKinematics = null;
   if (strokeType === 'serve') {
-    const classification = classifyServeType(simulatedServeKinematics(rand));
+    serveKinematics = simulatedServeKinematics(rand);
+    const classification = classifyServeType(serveKinematics);
     if (classification.serveType !== 'UNKNOWN') {
       serveType = classification.serveType;
       serveConfidence = Math.round(classification.confidenceScore * 100) / 100;
@@ -273,15 +278,16 @@ export function analyzeStrokeVideo({ athleteId, strokeType, videoFilename, note 
       `velocidade de pico ${impact.peakVelocity} un/s, confiança ${Math.round(impact.confidenceScore * 100)}%.`
     : '';
 
-  // Diagnostico biomecanico (biomechRuleEngine.js/biomechReport.js) -- cruza
-  // coil + flexao de joelho + profundidade de contato + lag de punho para
-  // achar causas-raiz, nao so apontar angulos fora da faixa. So ha regras
-  // implementadas para forehand por enquanto.
+  // Diagnostico biomecanico (biomechRuleEngine.js/serveRuleEngine.js via
+  // biomechReport.js) -- cruza multiplos marcadores para achar causas-raiz,
+  // nao so apontar angulos fora da faixa. So ha regras implementadas para
+  // forehand e saque por enquanto.
   //
-  // contactDepthCm vem do proprio frame de impacto detectado acima (posicao
-  // do punho naquele instante, convertida para cm) -- ja e uma metrica real.
-  // wristLagAngleDeg e racketFaceAngleDeg ainda nao tem algoritmo dedicado
-  // portado, entao seguem SIMULADOS por enquanto.
+  // Campos ja calculados por algoritmos reais (coil, angulos articulares,
+  // profundidade de contato via frame de impacto, cinematica do saque) sao
+  // reaproveitados; campos sem algoritmo dedicado ainda (lag de punho, face
+  // da raquete, deslocamento vertical, rotacao externa de ombro, inclinacao
+  // de cabeca) seguem SIMULADOS.
   let biomechReport = null;
   if (strokeType === 'forehand' && coil && jointAngles && impact) {
     const impactWristDepth = impactFrames[impact.impactFrameIndex]
@@ -295,6 +301,20 @@ export function analyzeStrokeVideo({ athleteId, strokeType, videoFilename, note 
       racketFaceAngleDeg: Math.round((75 + rand() * 30) * 10) / 10,
     };
     biomechReport = generateBiomechanicalReport('FOREHAND', features);
+  } else if (strokeType === 'serve' && jointAngles && serveKinematics) {
+    const features = {
+      kneeFlexionDeg: jointAngles.kneeFlexion,
+      shoulderTiltDeg: jointAngles.shoulderTilt,
+      elbowAbductionDeg: jointAngles.shoulderAbduction, // proxy: ainda sem algoritmo dedicado de abducao de cotovelo
+      racketFaceAngleTrophyDeg: Math.round(rand() * 90 * 10) / 10,
+      verticalDisplacementCm: Math.round(rand() * 45 * 10) / 10,
+      shoulderExternalRotationDeg: Math.round((40 + rand() * 90) * 10) / 10,
+      tossRelativeYOffsetCm: Math.round(serveKinematics.tossApexRelative.y * 100 * 10) / 10,
+      contactElbowFlexionDeg: jointAngles.elbowFlexion,
+      wristPronationSpeedDegSec: Math.round(serveKinematics.pronationAngularVelocity * 10) / 10,
+      headTiltAtImpactDeg: Math.round(rand() * 35 * 10) / 10,
+    };
+    biomechReport = generateBiomechanicalReport('SERVE', features);
   }
   const biomechNote = biomechReport ? ` ${biomechReport.summaryFeedback}` : '';
 

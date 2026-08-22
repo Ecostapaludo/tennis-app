@@ -1,22 +1,28 @@
 // ---------------------------------------------------------------------------
-// Orquestra o motor de regras (biomechRuleEngine.js) num relatorio
-// biomecanico completo: diagnosticos + escore de eficiencia cinetica (0-100)
-// + escore de seguranca articular (0-100) + sintese em linguagem natural.
-// Portado 1:1 do modulo fornecido pelo head coach
-// (gemini-code-1787424875134.ts).
+// Orquestra os motores de regras (biomechRuleEngine.js para forehand,
+// serveRuleEngine.js para saque) num relatorio biomecanico completo:
+// diagnosticos + escore de eficiencia cinetica (0-100) + escore de seguranca
+// articular (0-100) + sintese em linguagem natural. Portado 1:1 do modulo
+// fornecido pelo head coach (gemini-code-1787424875134.ts); o branch de SERVE
+// e a extensao equivalente feita quando o motor de regras do saque
+// (gemini-code-1787425346335.ts) foi fornecido depois -- mesmo padrao de
+// escore, so trocando qual motor de regras roda.
 //
-// Hoje so ha regras implementadas para FOREHAND (analyzeForehand) -- outros
-// golpes retornam relatorio sem diagnosticos ate regras equivalentes serem
+// Hoje so ha regras implementadas para FOREHAND e SERVE -- outros golpes
+// retornam relatorio sem diagnosticos ate regras equivalentes serem
 // fornecidas.
 // ---------------------------------------------------------------------------
 
 import { analyzeForehand } from './biomechRuleEngine.js';
+import { evaluateServe } from './serveRuleEngine.js';
 
 export function generateBiomechanicalReport(strokeType, features) {
   // 1. Extracao de diagnosticos pelas regras biomecanicas
   let diagnoses = [];
   if (strokeType === 'FOREHAND') {
     diagnoses = analyzeForehand(features);
+  } else if (strokeType === 'SERVE') {
+    diagnoses = evaluateServe(features);
   }
 
   // 2. Calculo do escore de eficiencia cinetica (0 a 100)
@@ -36,8 +42,9 @@ export function generateBiomechanicalReport(strokeType, features) {
   kineticScore = Math.max(20, kineticScore);
   safetyScore = Math.max(30, safetyScore);
 
-  // 3. Montagem das metricas avaliadas
-  const evaluatedMetrics = [
+  // 3. Montagem das metricas avaliadas (so definidas para forehand por
+  // enquanto -- o motor do saque nao veio com uma lista equivalente)
+  const evaluatedMetrics = strokeType === 'FOREHAND' ? [
     {
       markerId: 'pelvic_scapular_coil',
       name: 'Dissociação Pélvico-Escapular (Coil)',
@@ -58,7 +65,7 @@ export function generateBiomechanicalReport(strokeType, features) {
       severity: features.contactDepthCm < 15 ? 'CRITICAL_FAULT' : 'OPTIMAL',
       deviation: Math.max(0, 20 - features.contactDepthCm),
     },
-  ];
+  ] : [];
 
   // 4. Sintese em linguagem natural
   let summaryText = '';
