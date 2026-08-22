@@ -133,8 +133,53 @@ function renderResult(wrap, analysis, strokeLabel) {
         ]) : null,
       ]),
     ]) : null,
+    analysis.biomechReport ? buildBiomechReportBlock(analysis.biomechReport) : null,
     h('p', { class: 'video-note' }, [analysis.aiComments]),
   ]));
+}
+
+const SEVERITY_LABEL = { CRITICAL_FAULT: 'Falha crítica', MINOR_DEVIATION: 'Desvio leve', OPTIMAL: 'Ótimo' };
+const SEVERITY_BADGE = { CRITICAL_FAULT: 'badge-critical', MINOR_DEVIATION: 'badge-warning', OPTIMAL: 'badge-low' };
+
+function buildBiomechReportBlock(report) {
+  const wrap = h('div', { class: 'card', style: 'background:var(--surface-2);margin-bottom:12px' }, [
+    h('h4', { style: 'margin-bottom:8px' }, ['Diagnóstico biomecânico (causa-raiz)']),
+    h('div', { style: 'display:flex;gap:16px;margin-bottom:10px' }, [
+      percentScoreBlock('Eficiência cinética', report.overallKineticEfficiencyScore),
+      percentScoreBlock('Segurança articular', report.injurySafetyScore),
+    ]),
+    h('p', { style: 'font-size:13.5px;margin:0 0 10px' }, [report.summaryFeedback]),
+  ]);
+
+  report.diagnoses.forEach((diag) => {
+    wrap.appendChild(h('div', { class: 'card', style: 'margin-bottom:8px;padding:12px' }, [
+      h('div', { class: 'page-header', style: 'margin-bottom:4px' }, [
+        h('strong', { style: 'font-size:13.5px' }, [diag.title]),
+        h('span', { class: `badge ${SEVERITY_BADGE[diag.severity] || 'badge-neutral'}` }, [SEVERITY_LABEL[diag.severity] || diag.severity]),
+      ]),
+      h('p', { style: 'font-size:13px;margin:0 0 4px' }, [h('strong', {}, ['Causa-raiz: ']), diag.rootCauseDescription]),
+      h('p', { style: 'font-size:13px;margin:0 0 4px' }, [h('strong', {}, ['Impacto: ']), diag.biomechanicalImpact]),
+      diag.injuryRiskAssessment ? h('p', { style: 'font-size:13px;margin:0 0 6px;color:var(--status-critical)' }, [
+        h('strong', {}, ['Risco de lesão: ']), diag.injuryRiskAssessment,
+      ]) : null,
+      diag.correctiveDrills && diag.correctiveDrills.length ? h('div', {}, [
+        h('strong', { style: 'font-size:12.5px' }, ['Drills corretivos']),
+        h('ul', { style: 'margin-top:4px' }, diag.correctiveDrills.map((d) => h('li', { style: 'font-size:13px;margin-bottom:4px' }, [
+          h('strong', {}, [d.drillName]), ` — ${d.objective} `,
+          h('em', {}, [`"${d.focusCue}"`]),
+        ]))),
+      ]) : null,
+    ]));
+  });
+
+  return wrap;
+}
+
+function percentScoreBlock(label, val) {
+  return h('div', {}, [
+    h('div', { style: 'font-size:12px;color:var(--text-secondary)' }, [label]),
+    h('span', { class: `score-pill ${scoreClass(val / 10)}` }, [`${val}/100`]),
+  ]);
 }
 function scoreBlock(label, val) {
   return h('div', {}, [

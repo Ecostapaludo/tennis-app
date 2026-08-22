@@ -12,6 +12,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadsDir = path.resolve(__dirname, '../../uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
+function attachBiomechReport(row) {
+  return { ...row, biomech_report: row.biomech_report_json ? JSON.parse(row.biomech_report_json) : null };
+}
+
 export function registerVideoRoutes(router) {
   router.get('/api/video-analyses', async (req, res, params, user, query) => {
     const scoped = scopeAthleteIds(user);
@@ -24,7 +28,7 @@ export function registerVideoRoutes(router) {
       if (scoped !== null) return sendJson(res, 403, { error: 'Recurso nao disponivel para este perfil.' });
       rows = db.prepare('SELECT * FROM stroke_video_analyses ORDER BY date DESC').all();
     }
-    sendJson(res, 200, rows);
+    sendJson(res, 200, rows.map(attachBiomechReport));
   });
 
   router.post('/api/video-analyses', async (req, res) => {
@@ -50,8 +54,9 @@ export function registerVideoRoutes(router) {
       `INSERT INTO stroke_video_analyses (athlete_id, date, stroke_type, video_filename, video_original_name,
         note, technique_score, power_score, consistency_score, balance_score, overall_score, ai_comments,
         analysis_source, serve_type, serve_confidence, knee_flexion, elbow_flexion, shoulder_abduction, shoulder_tilt,
-        impact_frame_index, impact_timestamp_ms, impact_confidence, peak_velocity, coil_dissociation, coil_sufficient)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        impact_frame_index, impact_timestamp_ms, impact_confidence, peak_velocity, coil_dissociation, coil_sufficient,
+        kinetic_efficiency_score, injury_safety_score, biomech_report_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       athleteId, date, strokeType, videoFilename, videoOriginalName, fields.note || null,
       analysis.techniqueScore, analysis.powerScore, analysis.consistencyScore, analysis.balanceScore,
@@ -59,7 +64,9 @@ export function registerVideoRoutes(router) {
       analysis.serveType || null, analysis.serveConfidence ?? null,
       analysis.kneeFlexion ?? null, analysis.elbowFlexion ?? null, analysis.shoulderAbduction ?? null, analysis.shoulderTilt ?? null,
       analysis.impactFrameIndex ?? null, analysis.impactTimestampMs ?? null, analysis.impactConfidence ?? null, analysis.peakVelocity ?? null,
-      analysis.coilDissociation ?? null, analysis.coilSufficient == null ? null : (analysis.coilSufficient ? 1 : 0)
+      analysis.coilDissociation ?? null, analysis.coilSufficient == null ? null : (analysis.coilSufficient ? 1 : 0),
+      analysis.kineticEfficiencyScore ?? null, analysis.injurySafetyScore ?? null,
+      analysis.biomechReport ? JSON.stringify(analysis.biomechReport) : null
     );
 
     sendJson(res, 201, { id: Number(info.lastInsertRowid), ...analysis });

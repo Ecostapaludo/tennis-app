@@ -3,6 +3,7 @@ import { classifyServeType } from './serveClassifier.js';
 import { MediaPipeLandmarks, extractBiomechanicalFrameMetrics } from './poseAngles.js';
 import { detectImpactFrame } from './impactDetection.js';
 import { calculatePelvicScapularCoil } from './coilAnalysis.js';
+import { generateBiomechanicalReport } from './biomechReport.js';
 
 // ---------------------------------------------------------------------------
 // MOTOR DE ANALISE BIOMECANICA DE VIDEO -- VERSAO SIMULADA
@@ -265,16 +266,42 @@ export function analyzeStrokeVideo({ athleteId, strokeType, videoFilename, note 
   // Deteccao do frame de impacto (t0) via pico de velocidade + desaceleracao
   // abrupta do punho (impactDetection.js), sobre uma serie de frames SIMULADA.
   const strokeCategory = (strokeType === 'serve' || strokeType === 'smash') ? 'SERVE_SMASH' : 'GROUNDSTROKE';
-  const impact = detectImpactFrame(simulatedImpactFrames(rand), strokeCategory, IMPACT_FPS);
+  const impactFrames = simulatedImpactFrames(rand);
+  const impact = detectImpactFrame(impactFrames, strokeCategory, IMPACT_FPS);
   const impactNote = impact
     ? ` Frame de impacto detectado: quadro ${impact.impactFrameIndex} (t=${impact.impactTimestampMs}ms), ` +
       `velocidade de pico ${impact.peakVelocity} un/s, confiança ${Math.round(impact.confidenceScore * 100)}%.`
     : '';
 
+  // Diagnostico biomecanico (biomechRuleEngine.js/biomechReport.js) -- cruza
+  // coil + flexao de joelho + profundidade de contato + lag de punho para
+  // achar causas-raiz, nao so apontar angulos fora da faixa. So ha regras
+  // implementadas para forehand por enquanto.
+  //
+  // contactDepthCm vem do proprio frame de impacto detectado acima (posicao
+  // do punho naquele instante, convertida para cm) -- ja e uma metrica real.
+  // wristLagAngleDeg e racketFaceAngleDeg ainda nao tem algoritmo dedicado
+  // portado, entao seguem SIMULADOS por enquanto.
+  let biomechReport = null;
+  if (strokeType === 'forehand' && coil && jointAngles && impact) {
+    const impactWristDepth = impactFrames[impact.impactFrameIndex]
+      ? impactFrames[impact.impactFrameIndex].wrist.y * 30
+      : 0;
+    const features = {
+      pelvicScapularCoilDeg: coil.dissociationAngleDeg,
+      kneeFlexionDeg: jointAngles.kneeFlexion,
+      wristLagAngleDeg: Math.round((80 + rand() * 70) * 10) / 10,
+      contactDepthCm: Math.round(impactWristDepth * 10) / 10,
+      racketFaceAngleDeg: Math.round((75 + rand() * 30) * 10) / 10,
+    };
+    biomechReport = generateBiomechanicalReport('FOREHAND', features);
+  }
+  const biomechNote = biomechReport ? ` ${biomechReport.summaryFeedback}` : '';
+
   const comments =
     `Analise simulada do golpe ${label}: o ponto mais forte identificado foi ${strongest.label.toLowerCase()} ` +
     `(${strongest.value}/10) e o ponto de maior oportunidade de evolucao foi ${weakest.label.toLowerCase()} ` +
-    `(${weakest.value}/10). Sugestao de foco no proximo ciclo de treino: trabalhar ${weakestTip}.${serveNote}${jointAnglesNote}${coilNote}${impactNote} ` +
+    `(${weakest.value}/10). Sugestao de foco no proximo ciclo de treino: trabalhar ${weakestTip}.${serveNote}${jointAnglesNote}${coilNote}${impactNote}${biomechNote} ` +
     `[Esta e uma analise SIMULADA gerada para fins de demonstracao -- conecte um servico real de analise ` +
     `de video (pose estimation) em src/lib/videoAnalysis.js para obter metricas biomecanicas reais.]`;
 
@@ -298,5 +325,8 @@ export function analyzeStrokeVideo({ athleteId, strokeType, videoFilename, note 
     peakVelocity: impact ? impact.peakVelocity : null,
     coilDissociation: coil ? coil.dissociationAngleDeg : null,
     coilSufficient: coil ? coil.isCoilSufficient : null,
+    kineticEfficiencyScore: biomechReport ? biomechReport.overallKineticEfficiencyScore : null,
+    injurySafetyScore: biomechReport ? biomechReport.injurySafetyScore : null,
+    biomechReport,
   };
 }

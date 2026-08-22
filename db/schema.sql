@@ -255,6 +255,9 @@ CREATE TABLE IF NOT EXISTS stroke_video_analyses (
   peak_velocity REAL,
   coil_dissociation REAL,
   coil_sufficient INTEGER,
+  kinetic_efficiency_score REAL,
+  injury_safety_score REAL,
+  biomech_report_json TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
