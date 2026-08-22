@@ -127,6 +127,10 @@ function renderResult(wrap, analysis, strokeLabel) {
         angleBlock('Cotovelo', analysis.elbowFlexion),
         angleBlock('Abdução ombro', analysis.shoulderAbduction),
         angleBlock('Inclinação ombros', analysis.shoulderTilt),
+        analysis.coilDissociation != null ? h('div', {}, [
+          h('div', { style: 'font-size:12px;color:var(--text-secondary)' }, ['Coil (X-Factor)']),
+          h('span', { class: `score-pill ${analysis.coilSufficient ? 'score-high' : 'score-low'}` }, [`${analysis.coilDissociation}°`]),
+        ]) : null,
       ]),
     ]) : null,
     h('p', { class: 'video-note' }, [analysis.aiComments]),

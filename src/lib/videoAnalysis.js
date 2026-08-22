@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { classifyServeType } from './serveClassifier.js';
 import { MediaPipeLandmarks, extractBiomechanicalFrameMetrics } from './poseAngles.js';
 import { detectImpactFrame } from './impactDetection.js';
+import { calculatePelvicScapularCoil } from './coilAnalysis.js';
 
 // ---------------------------------------------------------------------------
 // MOTOR DE ANALISE BIOMECANICA DE VIDEO -- VERSAO SIMULADA
@@ -100,9 +101,24 @@ function randomLandmark(rand, base, spread) {
   };
 }
 
+// Posiciona um par esquerda/direita (ombros ou quadril) girado por um angulo
+// yaw no plano X-Z em torno de um centro -- usado para controlar a rotacao
+// simulada de cada segmento e, com isso, a dissociacao pelvico-escapular.
+function yawPair(rand, center, yawDeg, halfWidth) {
+  const rad = (yawDeg * Math.PI) / 180;
+  const dx = Math.cos(rad) * halfWidth;
+  const dz = Math.sin(rad) * halfWidth;
+  const jitter = (mag) => (rand() * 2 - 1) * mag;
+  return {
+    left: { x: center.x - dx + jitter(0.02), y: center.y + jitter(0.08), z: center.z - dz + jitter(0.02), visibility: 0.85 + rand() * 0.15 },
+    right: { x: center.x + dx + jitter(0.02), y: center.y + jitter(0.08), z: center.z + dz + jitter(0.02), visibility: 0.85 + rand() * 0.15 },
+  };
+}
+
 // Monta um array de 33 landmarks (indices do MediaPipe Pose) com proporcoes
 // aproximadas de um corpo humano parado em posicao de saque/golpe, so
-// preenchendo os pontos que extractBiomechanicalFrameMetrics realmente le.
+// preenchendo os pontos que extractBiomechanicalFrameMetrics/
+// calculatePelvicScapularCoil realmente leem.
 // PONTO DE INTEGRACAO: substituir por landmarks reais vindos do MediaPipe
 // Pose Landmarker rodando sobre um frame do video enviado.
 function simulatedPoseLandmarks(rand, dominantSide) {
@@ -110,21 +126,34 @@ function simulatedPoseLandmarks(rand, dominantSide) {
   const landmarks = new Array(33).fill(null).map(() => ({ x: 0, y: 0, z: 0, visibility: 0 }));
   const L = MediaPipeLandmarks;
 
-  const hip = randomLandmark(rand, { x: 0, y: 0, z: 0 }, 0.05);
-  const knee = randomLandmark(rand, { x: 0.05, y: -0.9, z: 0 }, 0.15);
-  const ankle = randomLandmark(rand, { x: 0, y: -1.8, z: 0 }, 0.3);
-  const shoulder = randomLandmark(rand, { x: 0, y: 1.3, z: 0 }, 0.1);
-  const elbow = randomLandmark(rand, { x: 0.35, y: 0.9, z: 0.1 }, 0.25);
-  const wrist = randomLandmark(rand, { x: 0.6, y: 0.5, z: 0.2 }, 0.35);
-  const oppositeShoulder = randomLandmark(rand, { x: -0.35, y: 1.3, z: 0 }, 0.05);
+  // Rotacao (yaw) das linhas de ombro e quadril -- controla a dissociacao
+  // pelvico-escapular (coil) simulada, com variedade realista (as vezes
+  // suficiente, as vezes nao) em vez de sempre proxima de zero.
+  const hipYawDeg = rand() * 40;
+  const dissociationTarget = -5 + rand() * 55;
+  const shoulderYawDeg = hipYawDeg + dissociationTarget;
 
-  landmarks[isRight ? L.RIGHT_HIP : L.LEFT_HIP] = hip;
+  const shoulders = yawPair(rand, { x: 0, y: 1.3, z: 0 }, shoulderYawDeg, 0.35);
+  const hips = yawPair(rand, { x: 0, y: 0, z: 0 }, hipYawDeg, 0.3);
+
+  const dominantShoulder = isRight ? shoulders.right : shoulders.left;
+  const oppositeShoulder = isRight ? shoulders.left : shoulders.right;
+  const dominantHip = isRight ? hips.right : hips.left;
+  const oppositeHip = isRight ? hips.left : hips.right;
+
+  const knee = randomLandmark(rand, { x: dominantHip.x + 0.05, y: -0.9, z: dominantHip.z }, 0.15);
+  const ankle = randomLandmark(rand, { x: dominantHip.x, y: -1.8, z: dominantHip.z }, 0.3);
+  const elbow = randomLandmark(rand, { x: dominantShoulder.x + 0.35, y: 0.9, z: dominantShoulder.z + 0.1 }, 0.25);
+  const wrist = randomLandmark(rand, { x: dominantShoulder.x + 0.6, y: 0.5, z: dominantShoulder.z + 0.2 }, 0.35);
+
+  landmarks[isRight ? L.RIGHT_HIP : L.LEFT_HIP] = dominantHip;
   landmarks[isRight ? L.RIGHT_KNEE : L.LEFT_KNEE] = knee;
   landmarks[isRight ? L.RIGHT_ANKLE : L.LEFT_ANKLE] = ankle;
-  landmarks[isRight ? L.RIGHT_SHOULDER : L.LEFT_SHOULDER] = shoulder;
+  landmarks[isRight ? L.RIGHT_SHOULDER : L.LEFT_SHOULDER] = dominantShoulder;
   landmarks[isRight ? L.RIGHT_ELBOW : L.LEFT_ELBOW] = elbow;
   landmarks[isRight ? L.RIGHT_WRIST : L.LEFT_WRIST] = wrist;
   landmarks[isRight ? L.LEFT_SHOULDER : L.RIGHT_SHOULDER] = oppositeShoulder;
+  landmarks[isRight ? L.LEFT_HIP : L.RIGHT_HIP] = oppositeHip;
 
   return landmarks;
 }
@@ -210,14 +239,27 @@ export function analyzeStrokeVideo({ athleteId, strokeType, videoFilename, note 
     }
   }
 
+  // Landmarks de um unico frame -- SIMULADOS por enquanto, ver PONTO DE
+  // INTEGRACAO em simulatedPoseLandmarks acima -- reutilizados por todas as
+  // metricas de pose abaixo (angulos articulares e coil pelvico-escapular).
+  const poseLandmarks = simulatedPoseLandmarks(rand, 'RIGHT');
+
   // Angulos articulares (joelho/cotovelo/ombro) extraidos via algebra vetorial
-  // real (poseAngles.js) a partir de landmarks -- SIMULADOS por enquanto, ver
-  // PONTO DE INTEGRACAO em simulatedPoseLandmarks acima.
-  const jointAngles = extractBiomechanicalFrameMetrics(simulatedPoseLandmarks(rand, 'RIGHT'), 'RIGHT');
+  // real (poseAngles.js).
+  const jointAngles = extractBiomechanicalFrameMetrics(poseLandmarks, 'RIGHT');
   const jointAnglesNote = jointAngles
     ? ` Ângulos articulares estimados no frame analisado: joelho ${jointAngles.kneeFlexion}°, ` +
       `cotovelo ${jointAngles.elbowFlexion}°, abdução de ombro ${jointAngles.shoulderAbduction}°, ` +
       `inclinação de ombros ${jointAngles.shoulderTilt}°.`
+    : '';
+
+  // Dissociacao pelvico-escapular (Coil/X-Factor) via algebra vetorial real
+  // (coilAnalysis.js) -- e o marcador "hip_shoulder_separation_angle" do
+  // forehand na Base biomecanica (alvo 20 a 35 graus).
+  const coil = calculatePelvicScapularCoil(poseLandmarks);
+  const coilNote = coil
+    ? ` Dissociação pélvico-escapular (coil): ${coil.dissociationAngleDeg}° ` +
+      `(${coil.isCoilSufficient ? 'dentro do esperado' : 'abaixo do esperado'}).`
     : '';
 
   // Deteccao do frame de impacto (t0) via pico de velocidade + desaceleracao
@@ -232,7 +274,7 @@ export function analyzeStrokeVideo({ athleteId, strokeType, videoFilename, note 
   const comments =
     `Analise simulada do golpe ${label}: o ponto mais forte identificado foi ${strongest.label.toLowerCase()} ` +
     `(${strongest.value}/10) e o ponto de maior oportunidade de evolucao foi ${weakest.label.toLowerCase()} ` +
-    `(${weakest.value}/10). Sugestao de foco no proximo ciclo de treino: trabalhar ${weakestTip}.${serveNote}${jointAnglesNote}${impactNote} ` +
+    `(${weakest.value}/10). Sugestao de foco no proximo ciclo de treino: trabalhar ${weakestTip}.${serveNote}${jointAnglesNote}${coilNote}${impactNote} ` +
     `[Esta e uma analise SIMULADA gerada para fins de demonstracao -- conecte um servico real de analise ` +
     `de video (pose estimation) em src/lib/videoAnalysis.js para obter metricas biomecanicas reais.]`;
 
@@ -254,5 +296,7 @@ export function analyzeStrokeVideo({ athleteId, strokeType, videoFilename, note 
     impactTimestampMs: impact ? impact.impactTimestampMs : null,
     impactConfidence: impact ? impact.confidenceScore : null,
     peakVelocity: impact ? impact.peakVelocity : null,
+    coilDissociation: coil ? coil.dissociationAngleDeg : null,
+    coilSufficient: coil ? coil.isCoilSufficient : null,
   };
 }

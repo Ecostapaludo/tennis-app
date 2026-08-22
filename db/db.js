@@ -60,6 +60,8 @@ ensureColumn('stroke_video_analyses', 'impact_frame_index', 'INTEGER');
 ensureColumn('stroke_video_analyses', 'impact_timestamp_ms', 'REAL');
 ensureColumn('stroke_video_analyses', 'impact_confidence', 'REAL');
 ensureColumn('stroke_video_analyses', 'peak_velocity', 'REAL');
+ensureColumn('stroke_video_analyses', 'coil_dissociation', 'REAL');
+ensureColumn('stroke_video_analyses', 'coil_sufficient', 'INTEGER');
 
 export default db;
 export { dbPath };

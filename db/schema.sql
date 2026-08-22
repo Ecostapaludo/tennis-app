@@ -253,6 +253,8 @@ CREATE TABLE IF NOT EXISTS stroke_video_analyses (
   impact_timestamp_ms REAL,
   impact_confidence REAL,
   peak_velocity REAL,
+  coil_dissociation REAL,
+  coil_sufficient INTEGER,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

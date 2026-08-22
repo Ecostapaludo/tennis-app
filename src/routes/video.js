@@ -50,15 +50,16 @@ export function registerVideoRoutes(router) {
       `INSERT INTO stroke_video_analyses (athlete_id, date, stroke_type, video_filename, video_original_name,
         note, technique_score, power_score, consistency_score, balance_score, overall_score, ai_comments,
         analysis_source, serve_type, serve_confidence, knee_flexion, elbow_flexion, shoulder_abduction, shoulder_tilt,
-        impact_frame_index, impact_timestamp_ms, impact_confidence, peak_velocity)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        impact_frame_index, impact_timestamp_ms, impact_confidence, peak_velocity, coil_dissociation, coil_sufficient)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       athleteId, date, strokeType, videoFilename, videoOriginalName, fields.note || null,
       analysis.techniqueScore, analysis.powerScore, analysis.consistencyScore, analysis.balanceScore,
       analysis.overallScore, analysis.aiComments, analysis.analysisSource,
       analysis.serveType || null, analysis.serveConfidence ?? null,
       analysis.kneeFlexion ?? null, analysis.elbowFlexion ?? null, analysis.shoulderAbduction ?? null, analysis.shoulderTilt ?? null,
-      analysis.impactFrameIndex ?? null, analysis.impactTimestampMs ?? null, analysis.impactConfidence ?? null, analysis.peakVelocity ?? null
+      analysis.impactFrameIndex ?? null, analysis.impactTimestampMs ?? null, analysis.impactConfidence ?? null, analysis.peakVelocity ?? null,
+      analysis.coilDissociation ?? null, analysis.coilSufficient == null ? null : (analysis.coilSufficient ? 1 : 0)
     );
 
     sendJson(res, 201, { id: Number(info.lastInsertRowid), ...analysis });
