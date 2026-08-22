@@ -4,6 +4,8 @@ import { sendJson, readJsonBody } from '../lib/router.js';
 const STROKE_LABELS = {
   forehand: 'Forehand',
   backhand: 'Backhand',
+  backhand_2h: 'Backhand (2 mãos)',
+  backhand_1h: 'Backhand (1 mão)',
   serve: 'Saque',
   volley: 'Voleio',
   smash: 'Smash',
