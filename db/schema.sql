@@ -258,6 +258,7 @@ CREATE TABLE IF NOT EXISTS stroke_video_analyses (
   kinetic_efficiency_score REAL,
   injury_safety_score REAL,
   biomech_report_json TEXT,
+  pose_landmarks_json TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

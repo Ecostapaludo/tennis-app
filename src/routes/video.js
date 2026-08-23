@@ -14,7 +14,11 @@ const uploadsDir = path.resolve(__dirname, '../../uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
 function attachBiomechReport(row) {
-  return { ...row, biomech_report: row.biomech_report_json ? JSON.parse(row.biomech_report_json) : null };
+  return {
+    ...row,
+    biomech_report: row.biomech_report_json ? JSON.parse(row.biomech_report_json) : null,
+    pose_landmarks: row.pose_landmarks_json ? JSON.parse(row.pose_landmarks_json) : null,
+  };
 }
 
 function attachNarrative(row) {
@@ -70,8 +74,8 @@ export function registerVideoRoutes(router) {
         note, technique_score, power_score, consistency_score, balance_score, overall_score, ai_comments,
         analysis_source, serve_type, serve_confidence, knee_flexion, elbow_flexion, shoulder_abduction, shoulder_tilt,
         impact_frame_index, impact_timestamp_ms, impact_confidence, peak_velocity, coil_dissociation, coil_sufficient,
-        kinetic_efficiency_score, injury_safety_score, biomech_report_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        kinetic_efficiency_score, injury_safety_score, biomech_report_json, pose_landmarks_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       athleteId, date, strokeType, videoFilename, videoOriginalName, fields.note || null,
       analysis.techniqueScore, analysis.powerScore, analysis.consistencyScore, analysis.balanceScore,
@@ -81,7 +85,8 @@ export function registerVideoRoutes(router) {
       analysis.impactFrameIndex ?? null, analysis.impactTimestampMs ?? null, analysis.impactConfidence ?? null, analysis.peakVelocity ?? null,
       analysis.coilDissociation ?? null, analysis.coilSufficient == null ? null : (analysis.coilSufficient ? 1 : 0),
       analysis.kineticEfficiencyScore ?? null, analysis.injurySafetyScore ?? null,
-      analysis.biomechReport ? JSON.stringify(analysis.biomechReport) : null
+      analysis.biomechReport ? JSON.stringify(analysis.biomechReport) : null,
+      analysis.poseLandmarks ? JSON.stringify(analysis.poseLandmarks) : null
     );
 
     sendJson(res, 201, { id: Number(info.lastInsertRowid), ...analysis });

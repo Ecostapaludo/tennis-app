@@ -348,5 +348,6 @@ export function analyzeStrokeVideo({ athleteId, strokeType, videoFilename, note 
     kineticEfficiencyScore: biomechReport ? biomechReport.overallKineticEfficiencyScore : null,
     injurySafetyScore: biomechReport ? biomechReport.injurySafetyScore : null,
     biomechReport,
+    poseLandmarks,
   };
 }

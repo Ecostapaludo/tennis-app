@@ -65,6 +65,7 @@ ensureColumn('stroke_video_analyses', 'coil_sufficient', 'INTEGER');
 ensureColumn('stroke_video_analyses', 'kinetic_efficiency_score', 'REAL');
 ensureColumn('stroke_video_analyses', 'injury_safety_score', 'REAL');
 ensureColumn('stroke_video_analyses', 'biomech_report_json', 'TEXT');
+ensureColumn('stroke_video_analyses', 'pose_landmarks_json', 'TEXT');
 
 export default db;
 export { dbPath };

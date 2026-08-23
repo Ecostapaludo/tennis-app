@@ -1,5 +1,6 @@
 import { h, clear, fmtDate, scoreClass, confirmModal } from '../dom.js';
 import { api } from '../api.js';
+import { poseSkeletonSVG } from '../components/poseSkeleton.js';
 
 const STROKES = [['forehand', 'Forehand'], ['backhand', 'Backhand'], ['serve', 'Saque'], ['volley', 'Voleio'], ['smash', 'Smash']];
 const STROKE_LABEL = Object.fromEntries(STROKES);
@@ -132,17 +133,23 @@ function renderResult(wrap, analysis, strokeLabel, athleteName) {
       scoreBlock('Consistência', analysis.consistencyScore),
       scoreBlock('Equilíbrio', analysis.balanceScore),
     ]),
-    analysis.kneeFlexion != null ? h('div', { style: 'margin-bottom:12px' }, [
-      h('p', { style: 'font-size:12px;color:var(--text-secondary);margin:0 0 6px' }, ['Ângulos articulares (frame analisado)']),
-      h('div', { class: 'grid grid-4' }, [
-        angleBlock('Joelho', analysis.kneeFlexion),
-        angleBlock('Cotovelo', analysis.elbowFlexion),
-        angleBlock('Abdução ombro', analysis.shoulderAbduction),
-        angleBlock('Inclinação ombros', analysis.shoulderTilt),
-        analysis.coilDissociation != null ? h('div', {}, [
-          h('div', { style: 'font-size:12px;color:var(--text-secondary)' }, ['Coil (X-Factor)']),
-          h('span', { class: `score-pill ${analysis.coilSufficient ? 'score-high' : 'score-low'}` }, [`${analysis.coilDissociation}°`]),
-        ]) : null,
+    analysis.kneeFlexion != null ? h('div', { class: 'grid grid-2', style: 'margin-bottom:12px;align-items:start' }, [
+      analysis.poseLandmarks ? h('div', { style: 'max-width:260px' }, [
+        h('div', { style: 'font-size:12px;color:var(--text-secondary);margin:0 0 6px' }, ['Esqueleto (frame analisado)']),
+        h('div', { html: poseSkeletonSVG(analysis.poseLandmarks, buildAngleAnnotations(analysis)) }),
+      ]) : null,
+      h('div', {}, [
+        h('p', { style: 'font-size:12px;color:var(--text-secondary);margin:0 0 6px' }, ['Ângulos articulares (frame analisado)']),
+        h('div', { class: 'grid grid-4' }, [
+          angleBlock('Joelho', analysis.kneeFlexion),
+          angleBlock('Cotovelo', analysis.elbowFlexion),
+          angleBlock('Abdução ombro', analysis.shoulderAbduction),
+          angleBlock('Inclinação ombros', analysis.shoulderTilt),
+          analysis.coilDissociation != null ? h('div', {}, [
+            h('div', { style: 'font-size:12px;color:var(--text-secondary)' }, ['Coil (X-Factor)']),
+            h('span', { class: `score-pill ${analysis.coilSufficient ? 'score-high' : 'score-low'}` }, [`${analysis.coilDissociation}°`]),
+          ]) : null,
+        ]),
       ]),
     ]) : null,
     analysis.biomechReport ? buildBiomechReportBlock(analysis.biomechReport) : null,
@@ -303,4 +310,26 @@ function openBiomechNarrativeModal(videoAnalysisId, athleteName, strokeLabel) {
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
   document.body.appendChild(backdrop);
   loadHistory();
+}
+
+// Indices do MediaPipe Pose usados na anotacao de angulos do lado dominante
+// (hoje sempre 'RIGHT' na simulacao -- ver poseAngles.js/videoAnalysis.js).
+const MP_IDX = { RIGHT_SHOULDER: 12, RIGHT_ELBOW: 14, RIGHT_WRIST: 16, RIGHT_HIP: 24, RIGHT_KNEE: 26, RIGHT_ANKLE: 28 };
+
+// Colore a anotacao de CRITICAL quando o diagnostico biomecanico real
+// menciona aquela articulacao na causa-raiz (evita inventar limiares novos
+// so para a cor do desenho -- reaproveita o mesmo diagnostico ja mostrado
+// no card "Diagnóstico biomecânico" abaixo).
+function jointStatus(label, biomechReport) {
+  const keyword = label.toLowerCase().split(' ')[0];
+  const hit = (biomechReport?.diagnoses || []).some((d) => (d.rootCauseDescription || '').toLowerCase().includes(keyword));
+  return hit ? 'CRITICAL' : 'OPTIMAL';
+}
+
+function buildAngleAnnotations(analysis) {
+  return [
+    { vertexIndex: MP_IDX.RIGHT_KNEE, p1Index: MP_IDX.RIGHT_HIP, p2Index: MP_IDX.RIGHT_ANKLE, angleValue: analysis.kneeFlexion, label: 'Joelho', status: jointStatus('joelho', analysis.biomechReport) },
+    { vertexIndex: MP_IDX.RIGHT_ELBOW, p1Index: MP_IDX.RIGHT_SHOULDER, p2Index: MP_IDX.RIGHT_WRIST, angleValue: analysis.elbowFlexion, label: 'Cotovelo', status: jointStatus('cotovelo', analysis.biomechReport) },
+    { vertexIndex: MP_IDX.RIGHT_SHOULDER, p1Index: MP_IDX.RIGHT_HIP, p2Index: MP_IDX.RIGHT_ELBOW, angleValue: analysis.shoulderAbduction, label: 'Ombro', status: jointStatus('ombro', analysis.biomechReport) },
+  ];
 }
