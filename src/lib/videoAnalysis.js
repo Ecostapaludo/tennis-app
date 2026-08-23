@@ -21,7 +21,7 @@ import { generateBiomechanicalReport } from './biomechReport.js';
 // angulos articulares, etc.) mantendo o mesmo formato de retorno.
 // ---------------------------------------------------------------------------
 
-const STROKE_LABELS = {
+export const STROKE_LABELS = {
   forehand: 'Forehand',
   backhand: 'Backhand',
   serve: 'Saque',

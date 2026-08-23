@@ -3,9 +3,10 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import db from '../../db/db.js';
-import { sendJson } from '../lib/router.js';
+import { sendJson, readJsonBody } from '../lib/router.js';
 import { readMultipart } from '../lib/multipart.js';
-import { analyzeStrokeVideo } from '../lib/videoAnalysis.js';
+import { analyzeStrokeVideo, STROKE_LABELS } from '../lib/videoAnalysis.js';
+import { buildHeuristicBiomechNarrative, refineBiomechNarrativeWithClaude } from '../lib/biomechNarrative.js';
 import { scopeAthleteIds } from './athletes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -14,6 +15,20 @@ if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
 function attachBiomechReport(row) {
   return { ...row, biomech_report: row.biomech_report_json ? JSON.parse(row.biomech_report_json) : null };
+}
+
+function attachNarrative(row) {
+  return {
+    id: row.id,
+    videoAnalysisId: row.video_analysis_id,
+    generatedAt: row.generated_at,
+    headline: row.headline,
+    executiveSummary: row.executive_summary,
+    kineticChainAudit: JSON.parse(row.kinetic_chain_audit_json),
+    actionPlan: JSON.parse(row.action_plan_json),
+    coachEncouragement: row.coach_encouragement,
+    source: row.source,
+  };
 }
 
 export function registerVideoRoutes(router) {
@@ -89,5 +104,62 @@ export function registerVideoRoutes(router) {
     if (!fs.existsSync(filePath)) return sendJson(res, 404, { error: 'Arquivo nao encontrado no servidor.' });
     res.writeHead(200, { 'Content-Type': 'video/mp4' });
     fs.createReadStream(filePath).pipe(res);
+  });
+
+  router.get('/api/video-analyses/:id/biomech-narrative', async (req, res, params) => {
+    const rows = db.prepare(
+      'SELECT * FROM video_biomech_narratives WHERE video_analysis_id = ? ORDER BY generated_at DESC'
+    ).all(Number(params.id));
+    sendJson(res, 200, rows.map(attachNarrative));
+  });
+
+  router.post('/api/video-analyses/:id/biomech-narrative', async (req, res, params) => {
+    const videoAnalysisId = Number(params.id);
+    const video = db.prepare('SELECT * FROM stroke_video_analyses WHERE id = ?').get(videoAnalysisId);
+    if (!video) return sendJson(res, 404, { error: 'Análise de vídeo não encontrada.' });
+    if (!video.biomech_report_json) {
+      return sendJson(res, 400, { error: 'Esta análise não tem diagnóstico biomecânico (só disponível para golpes com regras implementadas).' });
+    }
+    const athlete = db.prepare('SELECT name FROM athletes WHERE id = ?').get(video.athlete_id);
+    const athleteName = athlete ? athlete.name : 'Atleta';
+    const strokeLabel = STROKE_LABELS[video.stroke_type] || video.stroke_type;
+    const report = JSON.parse(video.biomech_report_json);
+
+    const b = await readJsonBody(req);
+    const heuristic = buildHeuristicBiomechNarrative(report, athleteName, strokeLabel);
+
+    let final = heuristic;
+    let source = 'heuristica';
+    if (b.useAi) {
+      const refined = await refineBiomechNarrativeWithClaude(heuristic, athleteName);
+      if (refined) { final = refined; source = 'ia_claude'; }
+    }
+
+    const info = db.prepare(
+      `INSERT INTO video_biomech_narratives (video_analysis_id, headline, executive_summary,
+        kinetic_chain_audit_json, action_plan_json, coach_encouragement, source)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      videoAnalysisId, final.headline, final.executiveSummary,
+      JSON.stringify(final.kineticChainAudit), JSON.stringify(final.actionPlan), final.coachEncouragement, source
+    );
+
+    sendJson(res, 201, {
+      id: Number(info.lastInsertRowid),
+      videoAnalysisId,
+      headline: final.headline,
+      executiveSummary: final.executiveSummary,
+      kineticChainAudit: final.kineticChainAudit,
+      actionPlan: final.actionPlan,
+      coachEncouragement: final.coachEncouragement,
+      source,
+      aiAvailable: Boolean(process.env.ANTHROPIC_API_KEY),
+    });
+  });
+
+  router.delete('/api/video-analyses/:videoId/biomech-narrative/:narrativeId', async (req, res, params) => {
+    db.prepare('DELETE FROM video_biomech_narratives WHERE id = ? AND video_analysis_id = ?')
+      .run(Number(params.narrativeId), Number(params.videoId));
+    sendJson(res, 200, { ok: true });
   });
 }

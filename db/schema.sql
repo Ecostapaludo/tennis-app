@@ -261,6 +261,22 @@ CREATE TABLE IF NOT EXISTS stroke_video_analyses (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Relatorio narrativo aprofundado (opcionalmente por IA) de uma analise de
+-- video ja existente -- mesmo padrao de historico de match_reports acima,
+-- so que a partir do biomech_report_json ja calculado, nao de estatisticas
+-- de jogo.
+CREATE TABLE IF NOT EXISTS video_biomech_narratives (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  video_analysis_id INTEGER NOT NULL REFERENCES stroke_video_analyses(id) ON DELETE CASCADE,
+  generated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  headline TEXT NOT NULL,
+  executive_summary TEXT NOT NULL,
+  kinetic_chain_audit_json TEXT NOT NULL,
+  action_plan_json TEXT NOT NULL,
+  coach_encouragement TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'heuristica'
+);
+
 -- athlete_id guarda o atleta principal (para planos individuais, o unico atleta;
 -- para planos de grupo, o primeiro selecionado). A lista completa de atletas de
 -- um plano de grupo fica em training_plan_athletes -- se essa tabela tiver
