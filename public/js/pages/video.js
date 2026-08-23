@@ -1,6 +1,9 @@
 import { h, clear, fmtDate, scoreClass, confirmModal } from '../dom.js';
 import { api } from '../api.js';
 import { poseSkeletonSVG } from '../components/poseSkeleton.js';
+import { drawBiomechanicalOverlay, normalizeLandmarksTo01 } from '../components/canvasOverlay.js';
+
+const IMPACT_FPS = 60; // mesmo valor usado na simulacao do backend (videoAnalysis.js)
 
 const STROKES = [['forehand', 'Forehand'], ['backhand', 'Backhand'], ['serve', 'Saque'], ['volley', 'Voleio'], ['smash', 'Smash']];
 const STROKE_LABEL = Object.fromEntries(STROKES);
@@ -119,6 +122,7 @@ function renderResult(wrap, analysis, strokeLabel, athleteName) {
         onClick: () => openBiomechNarrativeModal(analysis.id, athleteName, strokeLabel),
       }, ['🧠 Relatório IA aprofundado']) : null,
     ]),
+    analysis.poseLandmarks ? buildVideoPlayerBlock(analysis) : null,
     (analysis.serveType || analysis.impactFrameIndex != null) ? h('p', { style: 'margin:-6px 0 10px;display:flex;gap:6px;flex-wrap:wrap' }, [
       analysis.serveType ? h('span', { class: 'badge badge-torneio' }, [
         `Tipo de saque: ${SERVE_TYPE_LABEL[analysis.serveType] || analysis.serveType} (confiança ${Math.round(analysis.serveConfidence * 100)}%)`,
@@ -332,4 +336,78 @@ function buildAngleAnnotations(analysis) {
     { vertexIndex: MP_IDX.RIGHT_ELBOW, p1Index: MP_IDX.RIGHT_SHOULDER, p2Index: MP_IDX.RIGHT_WRIST, angleValue: analysis.elbowFlexion, label: 'Cotovelo', status: jointStatus('cotovelo', analysis.biomechReport) },
     { vertexIndex: MP_IDX.RIGHT_SHOULDER, p1Index: MP_IDX.RIGHT_HIP, p2Index: MP_IDX.RIGHT_ELBOW, angleValue: analysis.shoulderAbduction, label: 'Ombro', status: jointStatus('ombro', analysis.biomechReport) },
   ];
+}
+
+// ---------------------------------------------------------------------------
+// Player de video com overlay de canvas (esqueleto + arcos/badges de angulo)
+// -- reimplementacao em JS puro (sem React/build step, ver canvasOverlay.js)
+// do componente fornecido pelo head coach (gemini-code-1787498949894.ts).
+//
+// Como so temos UM instantaneo simulado de angulos (nao uma serie por
+// quadro), o overlay so e desenhado quando o video esta PAUSADO -- durante a
+// reproducao o canvas fica limpo, para nao passar a falsa impressao de
+// rastreamento continuo em tempo real que os dados nao sustentam.
+// ---------------------------------------------------------------------------
+
+function buildVideoPlayerBlock(analysis) {
+  const wrap = h('div', { class: 'card', style: 'margin-bottom:12px' });
+  wrap.appendChild(h('p', { style: 'font-size:12px;color:var(--text-secondary);margin:0 0 8px' }, [
+    'Vídeo enviado, com o esqueleto anotado sobreposto enquanto pausado.',
+  ]));
+
+  const container = h('div', { style: 'position:relative;width:100%;max-width:480px;aspect-ratio:16/9;background:#000;border-radius:8px;overflow:hidden' });
+  const videoEl = h('video', {
+    src: `/api/video-analyses/${analysis.id}/file`, muted: true, playsInline: true,
+    style: 'width:100%;height:100%;object-fit:contain;display:block',
+  });
+  const canvas = h('canvas', { style: 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none' });
+  container.appendChild(videoEl);
+  container.appendChild(canvas);
+
+  const normalizedLandmarks = normalizeLandmarksTo01(analysis.poseLandmarks);
+  const angleAnnotations = buildAngleAnnotations(analysis);
+
+  function drawOverlay() {
+    const w = canvas.clientWidth || 480;
+    const hgt = canvas.clientHeight || 270;
+    canvas.width = w;
+    canvas.height = hgt;
+    drawBiomechanicalOverlay(canvas.getContext('2d'), w, hgt, normalizedLandmarks, angleAnnotations);
+  }
+  function clearOverlay() {
+    canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  videoEl.addEventListener('error', () => wrap.remove()); // nenhum video foi enviado nesta analise
+  videoEl.addEventListener('loadedmetadata', drawOverlay);
+  videoEl.addEventListener('play', clearOverlay);
+  videoEl.addEventListener('pause', drawOverlay);
+  videoEl.addEventListener('seeked', () => { if (videoEl.paused) drawOverlay(); });
+
+  const playBtn = h('button', { class: 'btn btn-sm', type: 'button' }, ['Reproduzir']);
+  playBtn.addEventListener('click', () => { if (videoEl.paused) videoEl.play(); else videoEl.pause(); });
+  videoEl.addEventListener('play', () => { playBtn.textContent = 'Pausar'; });
+  videoEl.addEventListener('pause', () => { playBtn.textContent = 'Reproduzir'; });
+
+  const frameLabel = h('span', { style: 'font-family:monospace;font-size:12px;color:var(--text-secondary)' }, ['Frame: 0']);
+  function updateFrameLabel() {
+    const frame = Math.floor(videoEl.currentTime * IMPACT_FPS);
+    const isImpact = analysis.impactFrameIndex != null && frame === analysis.impactFrameIndex;
+    frameLabel.textContent = `Frame: ${frame}${isImpact ? ' (IMPACTO)' : ''}`;
+  }
+  videoEl.addEventListener('timeupdate', updateFrameLabel);
+  videoEl.addEventListener('seeked', updateFrameLabel);
+
+  const impactBtn = analysis.impactFrameIndex != null ? h('button', {
+    class: 'btn btn-sm btn-danger', type: 'button',
+    onClick: () => {
+      if (!isFinite(videoEl.duration)) return;
+      videoEl.currentTime = Math.min(analysis.impactFrameIndex / IMPACT_FPS, Math.max(0, videoEl.duration - 0.05));
+      videoEl.pause();
+    },
+  }, ['Ir para Impacto (t₀)']) : null;
+
+  wrap.appendChild(container);
+  wrap.appendChild(h('div', { style: 'display:flex;align-items:center;gap:8px;margin-top:8px' }, [playBtn, impactBtn, frameLabel]));
+  return wrap;
 }

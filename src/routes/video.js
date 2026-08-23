@@ -13,6 +13,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadsDir = path.resolve(__dirname, '../../uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
+const VIDEO_MIME = { '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm', '.m4v': 'video/mp4', '.avi': 'video/x-msvideo' };
+
 function attachBiomechReport(row) {
   return {
     ...row,
@@ -107,8 +109,35 @@ export function registerVideoRoutes(router) {
     if (!row || !row.video_filename) return sendJson(res, 404, { error: 'Video nao encontrado.' });
     const filePath = path.join(uploadsDir, row.video_filename);
     if (!fs.existsSync(filePath)) return sendJson(res, 404, { error: 'Arquivo nao encontrado no servidor.' });
-    res.writeHead(200, { 'Content-Type': 'video/mp4' });
-    fs.createReadStream(filePath).pipe(res);
+
+    const contentType = VIDEO_MIME[path.extname(filePath).toLowerCase()] || 'video/mp4';
+    const { size } = fs.statSync(filePath);
+
+    // Suporte a HTTP Range: sem isso o <video> do navegador nao consegue
+    // buscar (seek) para um ponto especifico do arquivo -- toda tentativa de
+    // seek silenciosamente volta para o inicio.
+    const range = req.headers.range;
+    if (!range) {
+      res.writeHead(200, { 'Content-Type': contentType, 'Content-Length': size, 'Accept-Ranges': 'bytes' });
+      fs.createReadStream(filePath).pipe(res);
+      return;
+    }
+
+    const match = range.match(/bytes=(\d*)-(\d*)/);
+    const start = match && match[1] ? Number(match[1]) : 0;
+    const end = match && match[2] ? Number(match[2]) : size - 1;
+    if (Number.isNaN(start) || Number.isNaN(end) || start > end || end >= size) {
+      res.writeHead(416, { 'Content-Range': `bytes */${size}` });
+      res.end();
+      return;
+    }
+    res.writeHead(206, {
+      'Content-Type': contentType,
+      'Content-Length': end - start + 1,
+      'Content-Range': `bytes ${start}-${end}/${size}`,
+      'Accept-Ranges': 'bytes',
+    });
+    fs.createReadStream(filePath, { start, end }).pipe(res);
   });
 
   router.get('/api/video-analyses/:id/biomech-narrative', async (req, res, params) => {
