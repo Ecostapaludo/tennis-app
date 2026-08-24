@@ -65,10 +65,147 @@ function attachAthletes(session) {
 
 function attachDrills(session) {
   const rows = db.prepare(
-    `SELECT d.id, d.name, d.focus_category, d.subcategory, d.duration_minutes FROM training_session_drills tsd
+    `SELECT d.id, d.name, d.focus_category, d.subcategory, d.duration_minutes, d.description, d.equipment, d.court_zone
+     FROM training_session_drills tsd
      JOIN drills d ON d.id = tsd.drill_id WHERE tsd.session_id = ? ORDER BY d.focus_category, d.subcategory, d.name`
   ).all(session.id);
   return { ...session, drills: rows };
+}
+
+function addDaysISO(dateStr, n) {
+  const d = new Date(`${dateStr}T00:00:00`);
+  d.setDate(d.getDate() + n);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
+}
+
+function esc(str) {
+  return String(str ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function formatDateLabel(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00`);
+  const label = d.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function formatDateShort(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00`);
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+const PRINT_CSS = `
+* { box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; color: #1a1a1a; background: #fff; margin: 0; padding: 24px; line-height: 1.5; }
+.toolbar { position: sticky; top: 0; background: #fff; padding-bottom: 12px; margin-bottom: 16px; border-bottom: 1px solid #ddd; }
+.toolbar button { background: #0e6ba8; color: #fff; border: none; padding: 10px 18px; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.doc-header { margin-bottom: 20px; }
+.doc-header h1 { margin: 0 0 4px; font-size: 22px; color: #0e6ba8; }
+.doc-subtitle { margin: 0; font-size: 15px; color: #555; }
+.day-heading { font-size: 17px; margin: 24px 0 10px; padding-bottom: 4px; border-bottom: 2px solid #0e6ba8; color: #0e6ba8; }
+.session { border: 1px solid #ccc; border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; break-inside: avoid; }
+.session-header { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
+.session-time { font-weight: 700; color: #0e6ba8; font-size: 13px; white-space: nowrap; }
+.session-title { margin: 0; font-size: 16px; }
+.session p { margin: 4px 0; font-size: 13px; }
+.drills { margin-top: 10px; border-top: 1px dashed #ccc; padding-top: 8px; }
+.drills h4 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; color: #666; }
+.drill { margin-bottom: 8px; padding-left: 10px; border-left: 3px solid #b8dff5; }
+.drill-name { font-weight: 700; margin: 0; font-size: 13.5px; }
+.drill-meta { font-weight: 400; color: #666; font-size: 12px; }
+.drill-desc { white-space: pre-wrap; font-size: 12.5px; color: #333; margin: 3px 0; }
+.drill-equip { font-size: 12px; color: #444; }
+.empty { color: #777; font-style: italic; }
+.doc-footer { margin-top: 30px; font-size: 11px; color: #999; text-align: right; }
+@media print {
+  .no-print { display: none !important; }
+  body { padding: 0; }
+}
+@page { size: A4; margin: 16mm; }
+`;
+
+function drillHtml(d) {
+  const meta = [
+    FOCUS_LABEL[d.focus_category] || d.focus_category,
+    d.subcategory ? TECHNICAL_SUBCATEGORY_LABEL[d.subcategory] || d.subcategory : null,
+    d.duration_minutes ? `${d.duration_minutes} min` : null,
+    d.court_zone || null,
+  ].filter(Boolean).join(' · ');
+  return `
+    <div class="drill">
+      <p class="drill-name">${esc(d.name)} <span class="drill-meta">(${esc(meta)})</span></p>
+      ${d.description ? `<p class="drill-desc">${esc(d.description).replace(/\n/g, '<br>')}</p>` : ''}
+      ${d.equipment ? `<p class="drill-equip"><strong>Material:</strong> ${esc(d.equipment)}</p>` : ''}
+    </div>`;
+}
+
+function sessionBlockHtml(s) {
+  const timeRange = s.start_time ? `${esc(s.start_time)}${s.end_time ? '–' + esc(s.end_time) : ''}` : '';
+  const athleteNames = (s.athletes || []).map((a) => esc(a.name)).join(', ');
+  const focusLines = [
+    ['Técnico', s.focus_technical], ['Físico', s.focus_physical],
+    ['Tático', s.focus_tactical], ['Mental', s.focus_mental],
+  ].filter(([, v]) => v).map(([label, v]) => `<p><strong>Foco ${label}:</strong> ${esc(v)}</p>`).join('');
+  const drillsHtml = (s.drills || []).length
+    ? `<div class="drills"><h4>Drills</h4>${s.drills.map(drillHtml).join('')}</div>`
+    : '';
+
+  return `
+  <article class="session">
+    <div class="session-header">
+      <span class="session-time">${timeRange}</span>
+      <h3 class="session-title">${esc(s.title)}</h3>
+    </div>
+    ${s.objective ? `<p><strong>Objetivo:</strong> ${esc(s.objective)}</p>` : ''}
+    ${focusLines}
+    ${athleteNames ? `<p><strong>Atletas:</strong> ${athleteNames}</p>` : ''}
+    ${s.notes ? `<p><strong>Notas:</strong> ${esc(s.notes)}</p>` : ''}
+    ${drillsHtml}
+  </article>`;
+}
+
+function buildPrintHtml(sessions, scope, rangeStart, rangeEnd) {
+  const title = scope === 'week'
+    ? `Semana de ${formatDateShort(rangeStart)} a ${formatDateShort(rangeEnd)}`
+    : formatDateLabel(rangeStart);
+
+  const byDate = new Map();
+  sessions.forEach((s) => {
+    const key = s.date.slice(0, 10);
+    if (!byDate.has(key)) byDate.set(key, []);
+    byDate.get(key).push(s);
+  });
+  const dateKeys = Array.from(byDate.keys()).sort();
+
+  const bodyHtml = dateKeys.length
+    ? dateKeys.map((dateKey) => `
+      <section class="day-block">
+        ${scope === 'week' ? `<h2 class="day-heading">${esc(formatDateLabel(dateKey))}</h2>` : ''}
+        ${byDate.get(dateKey).map(sessionBlockHtml).join('')}
+      </section>`).join('')
+    : '<p class="empty">Nenhuma sessão planejada neste período.</p>';
+
+  return `<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Plano de treino — ${esc(title)}</title>
+<style>${PRINT_CSS}</style>
+</head>
+<body>
+  <div class="no-print toolbar">
+    <button onclick="window.print()">🖨️ Imprimir / Salvar como PDF</button>
+  </div>
+  <header class="doc-header">
+    <h1>Plano de treino</h1>
+    <p class="doc-subtitle">${esc(title)}</p>
+  </header>
+  ${bodyHtml}
+  <footer class="doc-footer">Gerado em ${esc(new Date().toLocaleString('pt-BR'))}</footer>
+</body>
+</html>`;
 }
 
 function attachExtras(session) {
@@ -112,6 +249,34 @@ export function registerTrainingRoutes(router) {
         .filter((s) => s.athletes.length > 0);
     }
     sendJson(res, 200, rows);
+  });
+
+  router.get('/api/training-sessions/print', async (req, res, params, user, query) => {
+    const date = query.date;
+    const scope = query.scope === 'week' ? 'week' : 'day';
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Parametro "date" invalido.');
+      return;
+    }
+    const rangeStart = scope === 'week' ? mondayOfWeek(date) : date;
+    const rangeEnd = scope === 'week' ? addDaysISO(rangeStart, 6) : date;
+
+    let rows = db.prepare(
+      'SELECT * FROM training_sessions WHERE date >= ? AND date <= ? ORDER BY date, start_time'
+    ).all(rangeStart, rangeEnd).map(attachExtras);
+
+    const scoped = scopeAthleteIds(user);
+    if (scoped !== null) {
+      rows = rows
+        .map((s) => ({ ...s, athletes: s.athletes.filter((a) => scoped.includes(a.id)) }))
+        .filter((s) => s.athletes.length > 0);
+    }
+
+    const html = buildPrintHtml(rows, scope, rangeStart, rangeEnd);
+    const buffer = Buffer.from(html, 'utf-8');
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': buffer.length });
+    res.end(buffer);
   });
 
   router.get('/api/training-sessions/:id', async (req, res, params, user) => {

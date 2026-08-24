@@ -348,7 +348,13 @@ function buildDayPanel(state, byDate, athletes, groups, drills, role, canEdit, w
   const rawLabel = dateObj.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
   const label = rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1);
 
-  panel.appendChild(h('h3', {}, [label]));
+  panel.appendChild(h('div', { class: 'page-header', style: 'margin-bottom:2px' }, [
+    h('h3', { style: 'margin:0' }, [label]),
+    canEdit ? h('div', { class: 'chip-row', style: 'margin:0' }, [
+      h('a', { class: 'btn btn-sm', target: '_blank', href: `/api/training-sessions/print?date=${state.selectedDate}&scope=day` }, ['🖨️ PDF do dia']),
+      h('a', { class: 'btn btn-sm', target: '_blank', href: `/api/training-sessions/print?date=${state.selectedDate}&scope=week` }, ['🖨️ PDF da semana']),
+    ]) : null,
+  ]));
 
   const daySessions = (byDate.get(state.selectedDate) || [])
     .slice()
