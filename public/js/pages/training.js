@@ -1,6 +1,7 @@
 import { h, clear, confirmModal } from '../dom.js';
 import { api } from '../api.js';
 import { FOCUS_OPTS, FOCUS_LABEL, TECHNICAL_SUBCATEGORY_OPTS, TECHNICAL_SUBCATEGORY_LABEL } from '../focus.js';
+import { KIDS_STAGE_OPTS, KIDS_STAGE_LABEL } from '../kidsStages.js';
 import { courtDiagramSVG } from '../components/courtDiagram.js';
 
 const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -135,14 +136,16 @@ export async function renderTraining(main, ctx) {
   clear(main);
 
   const today = new Date();
-  const state = { viewMonth: today.getMonth(), viewYear: today.getFullYear(), selectedDate: toISODate(today) };
-  let byDate = groupByDate(sessions);
+  const state = { viewMonth: today.getMonth(), viewYear: today.getFullYear(), selectedDate: toISODate(today), activeTab: 'geral' };
   const toWeekFocusEntry = (r) => ({ focusCategory: r.focus_category, subcategory: r.subcategory || null, secondaryFocusCategory: r.secondary_focus_category || null });
   let weekFocusMap = new Map(weeklyFocusRows.map((r) => [r.week_start, toWeekFocusEntry(r)]));
 
   main.appendChild(h('div', { class: 'page-header' }, [
     h('div', {}, [h('h1', {}, ['Planejamento de treinos']), h('p', {}, ['Selecione um dia no calendário para ver ou adicionar sessões.'])]),
   ]));
+
+  const tabBarContainer = h('div');
+  main.appendChild(tabBarContainer);
 
   const focusBarContainer = h('div');
   main.appendChild(focusBarContainer);
@@ -152,7 +155,6 @@ export async function renderTraining(main, ctx) {
 
   async function reload() {
     sessions = await api.get('/api/training-sessions');
-    byDate = groupByDate(sessions);
     draw();
   }
 
@@ -203,16 +205,36 @@ export async function renderTraining(main, ctx) {
   }
 
   function draw() {
+    clear(tabBarContainer);
+    if (canEdit) {
+      tabBarContainer.appendChild(buildPlanTabBar(state, (tab) => { state.activeTab = tab; draw(); }));
+    }
     clear(focusBarContainer);
     if (canEdit) {
       focusBarContainer.appendChild(buildWeekFocusBar(state, weekFocusMap, isHeadCoach, setWeekFocus, clearWeekFocus, setWeekSubfocus, setWeekSecondaryFocus));
     }
     clear(layout);
+    const visibleSessions = state.activeTab === 'geral' ? sessions : sessions.filter((s) => s.kids_stage === state.activeTab);
+    const byDate = groupByDate(visibleSessions);
     layout.appendChild(buildCalendar(state, byDate, weekFocusMap, selectDate, navMonth, goToday));
-    layout.appendChild(buildDayPanel(state, byDate, athletes, groups, drills, role, canEdit, weekFocusMap, reload));
+    layout.appendChild(buildDayPanel(state, byDate, athletes, groups, drills, role, canEdit, weekFocusMap, reload, state.activeTab));
   }
 
   draw();
+}
+
+const PLAN_TABS = [{ value: 'geral', label: 'Calendário' }, ...KIDS_STAGE_OPTS];
+
+// Aba opcional para montar planos de treino de mini-tenis por estagio (bola
+// vermelha/laranja/verde): mesma logica de calendario/sessao de sempre, so
+// que filtrando a biblioteca de drills (e as proprias sessoes exibidas) pelo
+// estagio marcado em cada drill/sessao.
+function buildPlanTabBar(state, onSelect) {
+  return h('div', { class: 'chip-row', style: 'margin-bottom:14px' }, PLAN_TABS.map((t) => {
+    const chip = h('button', { type: 'button', class: `chip${state.activeTab === t.value ? ' active' : ''}` }, [t.label]);
+    chip.addEventListener('click', () => onSelect(t.value));
+    return chip;
+  }));
 }
 
 const SECONDARY_FOCUS_OPTS = FOCUS_OPTS.filter((f) => f.value !== 'technical');
@@ -342,7 +364,7 @@ function buildCalendar(state, byDate, weekFocusMap, onSelect, onNav, onToday) {
   return card;
 }
 
-function buildDayPanel(state, byDate, athletes, groups, drills, role, canEdit, weekFocusMap, onReload) {
+function buildDayPanel(state, byDate, athletes, groups, drills, role, canEdit, weekFocusMap, onReload, activeTab) {
   const panel = h('div', { class: 'card day-panel' });
   const dateObj = new Date(`${state.selectedDate}T00:00:00`);
   const rawLabel = dateObj.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
@@ -361,13 +383,14 @@ function buildDayPanel(state, byDate, athletes, groups, drills, role, canEdit, w
     .sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''));
 
   if (!daySessions.length) {
-    panel.appendChild(h('div', { class: 'empty-state', style: 'padding:20px 0' }, ['Nenhuma sessão neste dia.']));
+    const emptyMsg = activeTab === 'geral' ? 'Nenhuma sessão neste dia.' : `Nenhuma sessão de ${KIDS_STAGE_LABEL[activeTab]} neste dia.`;
+    panel.appendChild(h('div', { class: 'empty-state', style: 'padding:20px 0' }, [emptyMsg]));
   } else {
     daySessions.forEach((s) => panel.appendChild(buildSessionItem(s, athletes, groups, canEdit, onReload)));
   }
 
   if (canEdit) {
-    panel.appendChild(buildAddForm(state.selectedDate, athletes, groups, drills, role, weekFocusMap, onReload, daySessions));
+    panel.appendChild(buildAddForm(state.selectedDate, athletes, groups, drills, role, weekFocusMap, onReload, daySessions, activeTab));
   }
 
   return panel;
@@ -385,6 +408,7 @@ function buildSessionItem(s, athletes, groups, canEdit, onReload) {
         h('p', { style: 'margin:2px 0 0' }, [`${s.start_time || ''}${s.end_time ? '–' + s.end_time : ''}`]),
       ]),
       h('div', {}, [
+        s.kids_stage ? h('span', { class: 'badge badge-neutral' }, [KIDS_STAGE_LABEL[s.kids_stage] || s.kids_stage]) : null,
         h('span', { class: 'badge badge-neutral' }, [s.status]),
         canEdit
           ? h('button', {
@@ -461,7 +485,7 @@ function focusLine(label, value, focusDrills) {
   ]);
 }
 
-function buildAddForm(dateStr, athletes, groups, drills, role, weekFocusMap, onDone, daySessions) {
+function buildAddForm(dateStr, athletes, groups, drills, role, weekFocusMap, onDone, daySessions, activeTab) {
   const startTime = h('input', { type: 'time' });
   const endTime = h('input', { type: 'time' });
   const title = h('input', { required: true, placeholder: 'Ex: Treino técnico - forehand' });
@@ -509,11 +533,20 @@ function buildAddForm(dateStr, athletes, groups, drills, role, weekFocusMap, onD
     if (subcategoryRestricted) {
       list = list.filter((d) => d.subcategory === weekFocusSubcategory);
     }
+    const stageRestricted = activeTab && activeTab !== 'geral';
+    if (stageRestricted) {
+      list = list.filter((d) => d.kids_stage === activeTab);
+    }
     if (!list.length) {
       if (subcategoryRestricted) {
         return h('p', { style: 'font-size:11.5px;color:var(--text-muted);margin-top:4px' }, [
           `Foco da semana é "${TECHNICAL_SUBCATEGORY_LABEL[weekFocusSubcategory]}" — sem drills disponíveis aqui.`,
         ]);
+      }
+      if (stageRestricted) {
+        return role === 'head_coach'
+          ? h('a', { href: '#/drills', style: 'font-size:12px;display:inline-block;margin-top:4px' }, [`+ Cadastrar drills de ${KIDS_STAGE_LABEL[activeTab]} na biblioteca`])
+          : h('p', { style: 'font-size:11.5px;color:var(--text-muted);margin-top:4px' }, [`Nenhum drill de ${KIDS_STAGE_LABEL[activeTab]} cadastrado para este foco.`]);
       }
       return role === 'head_coach'
         ? h('a', { href: '#/drills', style: 'font-size:12px;display:inline-block;margin-top:4px' }, ['+ Cadastrar drills na biblioteca'])
@@ -579,12 +612,13 @@ function buildAddForm(dateStr, athletes, groups, drills, role, weekFocusMap, onD
           focusTechnical: focusTechnical.value || null, focusPhysical: focusPhysical.value || null,
           focusTactical: focusTactical.value || null, focusMental: focusMental.value || null,
           notes: notes.value || null, athleteIds: athletePicker.getSelectedIds(), drillIds: Array.from(selectedDrillIds),
+          kidsStage: activeTab && activeTab !== 'geral' ? activeTab : null,
         });
         onDone();
       } catch (err) { errorBox.textContent = err.message; }
     },
   }, [
-    h('h4', {}, ['+ Nova sessão nesse dia']),
+    h('h4', {}, [activeTab && activeTab !== 'geral' ? `+ Nova sessão nesse dia — ${KIDS_STAGE_LABEL[activeTab]}` : '+ Nova sessão nesse dia']),
     h('div', { class: 'form-grid', style: 'margin-top:10px' }, [
       h('div', { class: 'form-field' }, [h('label', {}, ['Início']), startTime]),
       h('div', { class: 'form-field' }, [h('label', {}, ['Fim']), endTime]),

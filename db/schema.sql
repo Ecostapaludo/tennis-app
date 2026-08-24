@@ -102,6 +102,7 @@ CREATE TABLE IF NOT EXISTS drills (
   duration_minutes INTEGER,
   equipment TEXT,
   court_zone TEXT,
+  kids_stage TEXT CHECK (kids_stage IS NULL OR kids_stage IN ('vermelha','laranja','verde')),
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -119,6 +120,7 @@ CREATE TABLE IF NOT EXISTS training_sessions (
   focus_mental TEXT,
   notes TEXT,
   status TEXT NOT NULL DEFAULT 'planejado',
+  kids_stage TEXT CHECK (kids_stage IS NULL OR kids_stage IN ('vermelha','laranja','verde')),
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

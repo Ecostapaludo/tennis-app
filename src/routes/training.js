@@ -4,7 +4,13 @@ import { scopeAthleteIds } from './athletes.js';
 
 const FOCUS_LABEL = { technical: 'Técnico', physical: 'Físico', tactical: 'Tático', mental: 'Mental' };
 const TECHNICAL_SUBCATEGORY_LABEL = { serve: 'Saque', volley_smash: 'Voleio/Smash', forehand: 'Forehand', backhand: 'Backhand/Slice' };
+const KIDS_STAGE_LABEL = { vermelha: 'Bola vermelha', laranja: 'Bola laranja', verde: 'Bola verde' };
+const KIDS_STAGES = new Set(['vermelha', 'laranja', 'verde']);
 const ATTENDANCE_STATUSES = ['previsto', 'presente', 'ausente', 'justificado'];
+
+function normalizeKidsStage(kidsStage) {
+  return KIDS_STAGES.has(kidsStage) ? kidsStage : null;
+}
 
 // Segunda-feira (ISO) da semana que contem a data informada
 function mondayOfWeek(dateStr) {
@@ -109,6 +115,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial
 .session-header { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
 .session-time { font-weight: 700; color: #0e6ba8; font-size: 13px; white-space: nowrap; }
 .session-title { margin: 0; font-size: 16px; }
+.stage-badge { font-size: 11px; font-weight: 600; color: #0e6ba8; background: #e3f2fb; border: 1px solid #b8dff5; border-radius: 999px; padding: 2px 10px; }
 .session p { margin: 4px 0; font-size: 13px; }
 .drills { margin-top: 10px; border-top: 1px dashed #ccc; padding-top: 8px; }
 .drills h4 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; color: #666; }
@@ -157,6 +164,7 @@ function sessionBlockHtml(s) {
     <div class="session-header">
       <span class="session-time">${timeRange}</span>
       <h3 class="session-title">${esc(s.title)}</h3>
+      ${s.kids_stage ? `<span class="stage-badge">${esc(KIDS_STAGE_LABEL[s.kids_stage] || s.kids_stage)}</span>` : ''}
     </div>
     ${s.objective ? `<p><strong>Objetivo:</strong> ${esc(s.objective)}</p>` : ''}
     ${focusLines}
@@ -298,11 +306,11 @@ export function registerTrainingRoutes(router) {
     if (drillError) return sendJson(res, 403, { error: drillError });
     const info = db.prepare(
       `INSERT INTO training_sessions (created_by, date, start_time, end_time, title, objective,
-        focus_technical, focus_physical, focus_tactical, focus_mental, notes, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        focus_technical, focus_physical, focus_tactical, focus_mental, notes, status, kids_stage)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(user.id, b.date, b.startTime || null, b.endTime || null, b.title, b.objective || null,
       b.focusTechnical || null, b.focusPhysical || null, b.focusTactical || null, b.focusMental || null,
-      b.notes || null, b.status || 'planejado');
+      b.notes || null, b.status || 'planejado', normalizeKidsStage(b.kidsStage));
     const sessionId = Number(info.lastInsertRowid);
     if (Array.isArray(b.athleteIds)) {
       const stmt = db.prepare('INSERT INTO training_session_athletes (session_id, athlete_id) VALUES (?, ?)');
@@ -324,14 +332,15 @@ export function registerTrainingRoutes(router) {
     if (drillError) return sendJson(res, 403, { error: drillError });
     db.prepare(
       `UPDATE training_sessions SET date=?, start_time=?, end_time=?, title=?, objective=?,
-        focus_technical=?, focus_physical=?, focus_tactical=?, focus_mental=?, notes=?, status=?
+        focus_technical=?, focus_physical=?, focus_tactical=?, focus_mental=?, notes=?, status=?, kids_stage=?
        WHERE id=?`
     ).run(
       b.date ?? existing.date, b.startTime ?? existing.start_time, b.endTime ?? existing.end_time,
       b.title ?? existing.title, b.objective ?? existing.objective,
       b.focusTechnical ?? existing.focus_technical, b.focusPhysical ?? existing.focus_physical,
       b.focusTactical ?? existing.focus_tactical, b.focusMental ?? existing.focus_mental,
-      b.notes ?? existing.notes, b.status ?? existing.status, id
+      b.notes ?? existing.notes, b.status ?? existing.status,
+      b.kidsStage !== undefined ? normalizeKidsStage(b.kidsStage) : existing.kids_stage, id
     );
     if (Array.isArray(b.athleteIds)) {
       db.prepare('DELETE FROM training_session_athletes WHERE session_id = ?').run(id);
