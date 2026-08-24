@@ -34,10 +34,25 @@ function groupsAndAthletesForDate(dateStr, groups) {
   return { groupsForDay, athletesForDay: Array.from(athletesById.values()).sort((a, b) => a.name.localeCompare(b.name)) };
 }
 
+// Retorna o intervalo (hora inicial/final) do horario cadastrado da turma
+// para o dia da semana informado, unindo todos os slots daquele dia (ex:
+// slots nas horas 15 e 16 viram { startHour: 15, endHour: 17 }). Turmas
+// avulsas (is_dropin) ou sem horario cadastrado nesse dia retornam null.
+function hourRangeForGroupOnDate(group, dayAbbrev) {
+  const hours = (group.scheduleSlots || []).filter((s) => s.day === dayAbbrev).map((s) => s.hour);
+  if (!hours.length) return null;
+  return { startHour: Math.min(...hours), endHour: Math.max(...hours) + 1 };
+}
+
+function formatHour(hour) {
+  return `${String(hour).padStart(2, '0')}:00`;
+}
+
 // Checkbox de atletas + atalho "selecionar por turma", reutilizado tanto no
 // formulario de nova sessao quanto no modal de editar atletas de uma sessao
-// ja existente.
-function buildAthletePicker(athletes, groups, preselectedIds) {
+// ja existente. onGroupSelect (opcional) e chamado quando uma turma e
+// marcada via chip, para permitir puxar o horario cadastrado dela.
+function buildAthletePicker(athletes, groups, preselectedIds, onGroupSelect) {
   if (!athletes.length) {
     return {
       el: h('p', { style: 'font-size:13px;color:var(--status-warning)' }, [
@@ -74,6 +89,7 @@ function buildAthletePicker(athletes, groups, preselectedIds) {
           const shouldSelect = !isSelected();
           g.athletes.forEach((a) => setAthleteChecked(a.id, shouldSelect));
           chip.classList.toggle('active', shouldSelect);
+          if (shouldSelect && onGroupSelect) onGroupSelect(g);
         });
         return chip;
       }))
@@ -345,7 +361,7 @@ function buildDayPanel(state, byDate, athletes, groups, drills, role, canEdit, w
   }
 
   if (canEdit) {
-    panel.appendChild(buildAddForm(state.selectedDate, athletes, groups, drills, role, weekFocusMap, onReload));
+    panel.appendChild(buildAddForm(state.selectedDate, athletes, groups, drills, role, weekFocusMap, onReload, daySessions));
   }
 
   return panel;
@@ -439,7 +455,7 @@ function focusLine(label, value, focusDrills) {
   ]);
 }
 
-function buildAddForm(dateStr, athletes, groups, drills, role, weekFocusMap, onDone) {
+function buildAddForm(dateStr, athletes, groups, drills, role, weekFocusMap, onDone, daySessions) {
   const startTime = h('input', { type: 'time' });
   const endTime = h('input', { type: 'time' });
   const title = h('input', { required: true, placeholder: 'Ex: Treino técnico - forehand' });
@@ -451,8 +467,21 @@ function buildAddForm(dateStr, athletes, groups, drills, role, weekFocusMap, onD
   const notes = h('textarea', { placeholder: 'Notas adicionais' });
   const errorBox = h('div', { class: 'error-msg' });
 
+  const dayAbbrev = WEEKDAYS[new Date(`${dateStr}T00:00:00`).getDay()];
+  // Ao marcar uma turma pelo chip, puxa o horario cadastrado dela (uniao com
+  // qualquer horario ja preenchido, para o caso de multiplas turmas com
+  // horarios diferentes serem selecionadas na mesma sessao).
+  function applyGroupSchedule(group) {
+    const range = hourRangeForGroupOnDate(group, dayAbbrev);
+    if (!range) return;
+    const curStart = startTime.value ? Number(startTime.value.split(':')[0]) : null;
+    const curEnd = endTime.value ? Number(endTime.value.split(':')[0]) : null;
+    startTime.value = formatHour(curStart === null ? range.startHour : Math.min(curStart, range.startHour));
+    endTime.value = formatHour(curEnd === null ? range.endHour : Math.max(curEnd, range.endHour));
+  }
+
   const { groupsForDay, athletesForDay } = groupsAndAthletesForDate(dateStr, groups);
-  const athletePicker = buildAthletePicker(athletesForDay, groupsForDay, []);
+  const athletePicker = buildAthletePicker(athletesForDay, groupsForDay, [], applyGroupSchedule);
 
   const weekFocusEntry = weekFocusMap.get(mondayOfWeek(dateStr)) || null;
   const weekFocusCategory = weekFocusEntry ? weekFocusEntry.focusCategory : null;
@@ -523,6 +552,19 @@ function buildAddForm(dateStr, athletes, groups, drills, role, weekFocusMap, onD
       if (!athletePicker.size()) {
         errorBox.textContent = 'Selecione ao menos um atleta (ou uma turma) para esta sessão — sem isso não é possível confirmar presença depois.';
         return;
+      }
+      if (startTime.value && endTime.value) {
+        const selectedIds = new Set(athletePicker.getSelectedIds());
+        const conflict = (daySessions || []).find((s) => (
+          s.start_time && s.end_time
+          && (s.athletes || []).some((a) => selectedIds.has(a.id))
+          && startTime.value < s.end_time && s.start_time < endTime.value
+        ));
+        if (conflict) {
+          const names = conflict.athletes.filter((a) => selectedIds.has(a.id)).map((a) => a.name).join(', ');
+          errorBox.textContent = `Conflito de horário: ${names} já tem a sessão "${conflict.title}" das ${conflict.start_time}–${conflict.end_time} nesse dia.`;
+          return;
+        }
       }
       try {
         await api.post('/api/training-sessions', {
