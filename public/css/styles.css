@@ -3,12 +3,12 @@
   --surface-1: #071c22;
   --surface-2: #0b2a30;
   --surface-card: #103a42;
-  --text-primary: #f0952e;
-  --text-secondary: #cf8a3f;
-  --text-muted: #9b7346;
-  --gridline: rgba(240, 149, 46, 0.16);
-  --baseline: rgba(240, 149, 46, 0.32);
-  --border: rgba(240, 149, 46, 0.22);
+  --text-primary: #5ec8f7;
+  --text-secondary: #7eb3d9;
+  --text-muted: #6f8fa8;
+  --gridline: rgba(94, 200, 247, 0.16);
+  --baseline: rgba(94, 200, 247, 0.32);
+  --border: rgba(94, 200, 247, 0.22);
 
   --series-1: #4a95e8; /* blue */
   --series-2: #eb6834; /* orange */

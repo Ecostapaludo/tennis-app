@@ -7,8 +7,8 @@
 // resolve custom properties do :root de forma confiavel neste app, ver
 // components/charts.js para o mesmo motivo).
 const SURFACE = '#0b2a30';
-const LINE = 'rgba(240, 149, 46, 0.35)';
-const NET = '#f0952e';
+const LINE = 'rgba(94, 200, 247, 0.35)';
+const NET = '#5ec8f7';
 
 // Coordenadas do esquema (viewBox 0 0 200 400, orientacao retrato)
 const C = { oL: 10, oR: 190, t: 10, b: 390, sL: 32, sR: 168, net: 200, svT: 98, svB: 302, cx: 100 };

@@ -4,9 +4,9 @@
 
 const NS = 'http://www.w3.org/2000/svg';
 const PALETTE = ['#4a95e8', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#2fbf2f', '#8b7ae8', '#e34948'];
-const GRID = 'rgba(240, 149, 46, 0.16)';
-const MUTED = '#9b7346';
-const INK = '#f0952e';
+const GRID = 'rgba(94, 200, 247, 0.16)';
+const MUTED = '#6f8fa8';
+const INK = '#5ec8f7';
 const SURFACE = '#103a42';
 
 export function seriesColor(i) { return PALETTE[i % PALETTE.length]; }

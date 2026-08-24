@@ -9,8 +9,8 @@
 // ---------------------------------------------------------------------------
 
 const SURFACE = '#0b2a30';
-const BONE = 'rgba(240, 149, 46, 0.55)';
-const JOINT = '#f0952e';
+const BONE = 'rgba(94, 200, 247, 0.55)';
+const JOINT = '#5ec8f7';
 const STATUS_COLOR = { OPTIMAL: '#4a95e8', WARNING: '#eda100', CRITICAL: '#e34948' };
 
 // Conexoes anatomicas do MediaPipe Pose (33 keypoints)
