@@ -471,7 +471,7 @@ details[open] > summary .eval-cat-arrow { transform: rotate(90deg); }
   border: 1px solid var(--border);
   transition: width 0.15s ease, height 0.15s ease;
 }
-.drill-diagram-thumb.expanded { width: 130px; height: 260px; }
+.drill-diagram-thumb.expanded { width: 155px; height: 345px; }
 
 .drill-pick-list {
   display: flex;

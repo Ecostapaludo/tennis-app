@@ -74,26 +74,60 @@ const TARGET_COLOR = '#eda100';
 
 function marker(cx, cy, label, color) {
   return `
-    <circle cx="${cx}" cy="${cy}" r="9" fill="${color}" fill-opacity="0.9" stroke="#0b2a30" stroke-width="1.5"/>
-    <text x="${cx}" y="${cy + 3.5}" font-size="9" font-weight="700" fill="#fff" text-anchor="middle">${label}</text>
+    <circle cx="${cx}" cy="${cy}" r="10" fill="${color}" fill-opacity="0.9" stroke="#0b2a30" stroke-width="1.5"/>
+    <text x="${cx}" y="${cy + 3.8}" font-size="10" font-weight="700" fill="#fff" text-anchor="middle">${label}</text>
   `;
 }
 
 function targetSVG(cx, cy) {
+  // Rotulo "Alvo" deslocado pra fora do circulo, pro lado que sobra mais
+  // espaco dentro do viewBox (evita cortar o texto perto das bordas).
+  const labelX = cx > 100 ? cx - 16 : cx + 16;
+  const anchor = cx > 100 ? 'end' : 'start';
   return `
     <circle cx="${cx}" cy="${cy}" r="10" fill="none" stroke="${TARGET_COLOR}" stroke-width="1.5" stroke-opacity="0.85"/>
     <circle cx="${cx}" cy="${cy}" r="5.5" fill="none" stroke="${TARGET_COLOR}" stroke-width="1.5" stroke-opacity="0.85"/>
     <circle cx="${cx}" cy="${cy}" r="1.8" fill="${TARGET_COLOR}"/>
+    <text x="${labelX}" y="${cy + 3}" font-size="9.5" font-weight="600" fill="${TARGET_COLOR}" text-anchor="${anchor}">Alvo</text>
   `;
 }
 
+// Detecta se o drill realmente tem um alvo/trajetoria definidos (zona
+// especifica e/ou pistas de direcao no texto) -- drills genericos (zona
+// "Quadra Inteira" sem nenhuma pista de direcao, ex: um drill fisico de
+// deslocamento) nao ganham trajetoria/alvo fabricados, so a posicao do aluno.
+function hasSpecificTarget(courtZone, description) {
+  const zoneText = (courtZone || '').trim().toLowerCase();
+  const combined = `${zoneText} ${(description || '').toLowerCase()}`;
+  const zoneIsGeneric = !zoneText || /^quadra (inteira|total)$/.test(zoneText) || /quadra dividida/.test(zoneText);
+  const hasDirectionalCue = /alvo|cruzad|paralel|diagonal|corredor|cantos?|quinas?|linha de fundo|zona de saque|linha de saque|colocaç|direç\w*|\bmira\b|meia-?quadra|\bcurta\b|profund/.test(combined);
+  return !zoneIsGeneric || hasDirectionalCue;
+}
+
+function parsePlayerCount(description) {
+  const m = (description || '').match(/jogadores:\s*(\d+)/i);
+  return m ? Number(m[1]) : null;
+}
+
+// Legenda empilhada (1 item por linha) em vez de uma linha so -- mais legivel
+// no tamanho pequeno do que tentar caber tudo numa unica linha horizontal.
+function legendSVG(items) {
+  const startY = 410;
+  return items.map((text, i) => (
+    `<text x="10" y="${startY + i * 11}" font-size="9.5" fill="rgba(255,255,255,0.75)">${text}</text>`
+  )).join('');
+}
+
 // Versao ampliada do diagrama, usada quando o drill esta selecionado: alem da
-// zona destacada, mostra jogador(es)/treinador em posicao esquematica, um alvo
-// dentro da zona e a trajetoria da bola ate ele -- ilustrando na pratica onde
-// o jogador fica e para onde a bola deve ir. Nao e uma foto real, e um esquema
-// tatico gerado a partir do texto ja cadastrado do drill (zona + descricao).
+// zona destacada, mostra a posicao esquematica do aluno (e do parceiro/
+// treinador, quando o drill nao e solo) e, quando o texto do drill da alguma
+// pista de direcao/alvo, tambem a trajetoria da bola ate um ponto de alvo
+// dentro da zona. Nao e uma foto real, e um esquema tatico gerado a partir do
+// texto ja cadastrado do drill (zona + descricao) -- drills sem pista de
+// direcao (ex: fisico generico) mostram so a posicao, sem alvo fabricado.
 export function drillIllustrationSVG(drill) {
   const courtZone = drill && drill.court_zone;
+  const description = (drill && drill.description) || '';
   const { zones, hasDiagonal } = matchZones(courtZone);
   const primaryZone = zones.find((z) => ZONE_DEFS[z]) || 'quadraInteira';
   const overlays = zones
@@ -105,13 +139,16 @@ export function drillIllustrationSVG(drill) {
     .join('');
 
   const rng = seededRandom((drill && drill.id) || 1);
-  const desc = ((drill && drill.description) || '').toLowerCase();
-  const soloFeed = /jogadores:\s*1\b|alimentador|cesta baixa|cesta alta|mão do treinador|professor alimenta/.test(desc);
+  const desc = description.toLowerCase();
+  const coachFed = /alimentador|cesta baixa|cesta alta|mão do treinador|professor alimenta|treinador alimenta/.test(desc);
+  const playerCount = parsePlayerCount(desc);
+  const showSecondMarker = coachFed || playerCount === null || playerCount >= 2;
+  const showTarget = hasSpecificTarget(courtZone, desc);
 
   const p1x = C.sL + 20 + rng() * (C.sR - C.sL - 40);
   const p1y = C.b - 14;
   const p2x = C.sL + 20 + rng() * (C.sR - C.sL - 40);
-  const p2y = soloFeed ? C.net - 18 : C.t + 14;
+  const p2y = coachFed ? C.net - 18 : C.t + 14;
 
   const targetRect = (ZONE_DEFS[primaryZone] || ZONE_DEFS.quadraInteira).rects[0];
   const [tx0, ty0, tw, th] = targetRect;
@@ -119,11 +156,15 @@ export function drillIllustrationSVG(drill) {
   const targetY = ty0 + th * (0.25 + rng() * 0.5);
 
   const arrowId = `drill-arrow-${uid++}`;
-  const trajectorySVG = hasDiagonal
+  const trajectorySVG = !showTarget ? '' : (hasDiagonal
     ? `<line x1="${C.sL}" y1="${C.t}" x2="${C.sR}" y2="${C.b}" stroke="${TARGET_COLOR}" stroke-width="2.5" stroke-dasharray="6 5" marker-end="url(#${arrowId})"/>`
-    : `<path d="M${p1x},${p1y} Q${(p1x + targetX) / 2},${(p1y + targetY) / 2 - 30} ${targetX},${targetY}" fill="none" stroke="${TARGET_COLOR}" stroke-width="2.5" stroke-dasharray="6 5" marker-end="url(#${arrowId})"/>`;
+    : `<path d="M${p1x},${p1y} Q${(p1x + targetX) / 2},${(p1y + targetY) / 2 - 30} ${targetX},${targetY}" fill="none" stroke="${TARGET_COLOR}" stroke-width="2.5" stroke-dasharray="6 5" marker-end="url(#${arrowId})"/>`);
 
-  return `<svg viewBox="0 0 200 400" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;display:block">
+  const legendParts = ['A — Aluno'];
+  if (showSecondMarker) legendParts.push(coachFed ? 'T — Treinador' : 'P2 — Parceiro');
+  if (showTarget) legendParts.push('Alvo — mira da bola');
+
+  return `<svg viewBox="0 0 200 445" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;display:block">
     <defs>
       <marker id="${arrowId}" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
         <path d="M0,0 L8,4 L0,8 Z" fill="${TARGET_COLOR}"/>
@@ -132,9 +173,10 @@ export function drillIllustrationSVG(drill) {
     ${baseCourtSVG()}
     ${overlays}
     ${trajectorySVG}
-    ${targetSVG(targetX, targetY)}
-    ${marker(p1x, p1y, 'V', PLAYER_COLOR)}
-    ${marker(p2x, p2y, soloFeed ? 'T' : 'P2', PARTNER_COLOR)}
+    ${showTarget ? targetSVG(targetX, targetY) : ''}
+    ${marker(p1x, p1y, 'A', PLAYER_COLOR)}
+    ${showSecondMarker ? marker(p2x, p2y, coachFed ? 'T' : 'P2', PARTNER_COLOR) : ''}
+    ${legendSVG(legendParts)}
   </svg>`;
 }
 
