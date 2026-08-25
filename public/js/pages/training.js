@@ -2,7 +2,7 @@ import { h, clear, confirmModal } from '../dom.js';
 import { api } from '../api.js';
 import { FOCUS_OPTS, FOCUS_LABEL, TECHNICAL_SUBCATEGORY_OPTS, TECHNICAL_SUBCATEGORY_LABEL } from '../focus.js';
 import { KIDS_STAGE_OPTS, KIDS_STAGE_LABEL, BALL_STAGE_LABEL, BALL_STAGE_EMOJI, ballStageToKidsStage } from '../kidsStages.js';
-import { courtDiagramSVG } from '../components/courtDiagram.js';
+import { courtDiagramSVG, drillIllustrationSVG } from '../components/courtDiagram.js';
 
 const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const MONTHS = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
@@ -735,9 +735,15 @@ function openDrillPickerModal(categoryLabel, list, selectedDrillIds, onChange) {
     if (!groupList.length) return;
     if (g.label) box.appendChild(h('h4', { style: 'margin-top:14px;color:var(--text-secondary)' }, [g.label]));
     groupList.forEach((d) => {
-      const card = h('label', { class: `drill-pick-card${selectedDrillIds.has(d.id) ? ' checked' : ''}` }, [
+      const isChecked = selectedDrillIds.has(d.id);
+      const diagramThumb = h('div', {
+        class: `drill-diagram-thumb${isChecked ? ' expanded' : ''}`,
+        title: d.court_zone || '',
+        html: isChecked ? drillIllustrationSVG(d) : courtDiagramSVG(d.court_zone),
+      });
+      const card = h('label', { class: `drill-pick-card${isChecked ? ' checked' : ''}` }, [
         h('div', { class: 'drill-pick-card-body' }, [
-          h('div', { class: 'drill-diagram-thumb', title: d.court_zone || '', html: courtDiagramSVG(d.court_zone) }),
+          diagramThumb,
           h('div', { style: 'flex:1;min-width:0' }, [
             h('div', { class: 'drill-pick-card-header' }, [
               h('input', {
@@ -745,6 +751,8 @@ function openDrillPickerModal(categoryLabel, list, selectedDrillIds, onChange) {
                 onChange: (e) => {
                   if (e.target.checked) selectedDrillIds.add(d.id); else selectedDrillIds.delete(d.id);
                   card.classList.toggle('checked', e.target.checked);
+                  diagramThumb.classList.toggle('expanded', e.target.checked);
+                  diagramThumb.innerHTML = e.target.checked ? drillIllustrationSVG(d) : courtDiagramSVG(d.court_zone);
                 },
               }),
               h('strong', {}, [d.name]),

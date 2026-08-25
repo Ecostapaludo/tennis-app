@@ -56,6 +56,88 @@ function baseCourtSVG() {
 
 let uid = 0;
 
+// PRNG determinístico simples (Park-Miller LCG) -- gera sempre os mesmos
+// valores para o mesmo id de drill, so pra dar variedade visual entre drills
+// que compartilham a mesma zona (sem foto real, e so decorativo/ilustrativo).
+function seededRandom(seed) {
+  let s = seed % 2147483647;
+  if (s <= 0) s += 2147483646;
+  return () => {
+    s = (s * 16807) % 2147483647;
+    return (s - 1) / 2147483646;
+  };
+}
+
+const PLAYER_COLOR = '#4a95e8';
+const PARTNER_COLOR = '#eb6834';
+const TARGET_COLOR = '#eda100';
+
+function marker(cx, cy, label, color) {
+  return `
+    <circle cx="${cx}" cy="${cy}" r="9" fill="${color}" fill-opacity="0.9" stroke="#0b2a30" stroke-width="1.5"/>
+    <text x="${cx}" y="${cy + 3.5}" font-size="9" font-weight="700" fill="#fff" text-anchor="middle">${label}</text>
+  `;
+}
+
+function targetSVG(cx, cy) {
+  return `
+    <circle cx="${cx}" cy="${cy}" r="10" fill="none" stroke="${TARGET_COLOR}" stroke-width="1.5" stroke-opacity="0.85"/>
+    <circle cx="${cx}" cy="${cy}" r="5.5" fill="none" stroke="${TARGET_COLOR}" stroke-width="1.5" stroke-opacity="0.85"/>
+    <circle cx="${cx}" cy="${cy}" r="1.8" fill="${TARGET_COLOR}"/>
+  `;
+}
+
+// Versao ampliada do diagrama, usada quando o drill esta selecionado: alem da
+// zona destacada, mostra jogador(es)/treinador em posicao esquematica, um alvo
+// dentro da zona e a trajetoria da bola ate ele -- ilustrando na pratica onde
+// o jogador fica e para onde a bola deve ir. Nao e uma foto real, e um esquema
+// tatico gerado a partir do texto ja cadastrado do drill (zona + descricao).
+export function drillIllustrationSVG(drill) {
+  const courtZone = drill && drill.court_zone;
+  const { zones, hasDiagonal } = matchZones(courtZone);
+  const primaryZone = zones.find((z) => ZONE_DEFS[z]) || 'quadraInteira';
+  const overlays = zones
+    .filter((z) => ZONE_DEFS[z])
+    .map((z) => {
+      const def = ZONE_DEFS[z];
+      return def.rects.map(([x, y, w, h]) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${def.color}" fill-opacity="${def.opacity}" rx="2"/>`).join('');
+    })
+    .join('');
+
+  const rng = seededRandom((drill && drill.id) || 1);
+  const desc = ((drill && drill.description) || '').toLowerCase();
+  const soloFeed = /jogadores:\s*1\b|alimentador|cesta baixa|cesta alta|mão do treinador|professor alimenta/.test(desc);
+
+  const p1x = C.sL + 20 + rng() * (C.sR - C.sL - 40);
+  const p1y = C.b - 14;
+  const p2x = C.sL + 20 + rng() * (C.sR - C.sL - 40);
+  const p2y = soloFeed ? C.net - 18 : C.t + 14;
+
+  const targetRect = (ZONE_DEFS[primaryZone] || ZONE_DEFS.quadraInteira).rects[0];
+  const [tx0, ty0, tw, th] = targetRect;
+  const targetX = tx0 + tw * (0.25 + rng() * 0.5);
+  const targetY = ty0 + th * (0.25 + rng() * 0.5);
+
+  const arrowId = `drill-arrow-${uid++}`;
+  const trajectorySVG = hasDiagonal
+    ? `<line x1="${C.sL}" y1="${C.t}" x2="${C.sR}" y2="${C.b}" stroke="${TARGET_COLOR}" stroke-width="2.5" stroke-dasharray="6 5" marker-end="url(#${arrowId})"/>`
+    : `<path d="M${p1x},${p1y} Q${(p1x + targetX) / 2},${(p1y + targetY) / 2 - 30} ${targetX},${targetY}" fill="none" stroke="${TARGET_COLOR}" stroke-width="2.5" stroke-dasharray="6 5" marker-end="url(#${arrowId})"/>`;
+
+  return `<svg viewBox="0 0 200 400" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;display:block">
+    <defs>
+      <marker id="${arrowId}" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+        <path d="M0,0 L8,4 L0,8 Z" fill="${TARGET_COLOR}"/>
+      </marker>
+    </defs>
+    ${baseCourtSVG()}
+    ${overlays}
+    ${trajectorySVG}
+    ${targetSVG(targetX, targetY)}
+    ${marker(p1x, p1y, 'V', PLAYER_COLOR)}
+    ${marker(p2x, p2y, soloFeed ? 'T' : 'P2', PARTNER_COLOR)}
+  </svg>`;
+}
+
 export function courtDiagramSVG(courtZone) {
   const { zones, hasDiagonal } = matchZones(courtZone);
   const overlays = zones
