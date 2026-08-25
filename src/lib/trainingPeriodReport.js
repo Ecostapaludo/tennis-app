@@ -56,7 +56,8 @@ export function buildHeuristicPeriodReport(sessions, { rangeStart, rangeEnd, sco
       .filter((f) => f.count > 0)
       .map((f) => `${f.label.toLowerCase()} em ${f.count} de ${sessionCount} sessões (${f.pct}%)`);
     const topDrills = drillsUsed.slice(0, 5).map((d) => d.name);
-    summary = `${scopeLabel ? `${scopeLabel} — ` : ''}${sessionCount} sessão${sessionCount === 1 ? '' : 'ões'} planejada${sessionCount === 1 ? '' : 's'} entre ${periodLabel}. `
+    const sessionWord = sessionCount === 1 ? 'sessão planejada' : 'sessões planejadas';
+    summary = `${scopeLabel ? `${scopeLabel} — ` : ''}${sessionCount} ${sessionWord} entre ${periodLabel}. `
       + (focusParts.length ? `Distribuição de foco: ${focusParts.join('; ')}. ` : '')
       + (topDrills.length ? `Drills mais usados: ${topDrills.join(', ')}. ` : 'Nenhum drill vinculado às sessões deste período. ')
       + (objectives.length ? `${objectives.length} objetivo(s) registrado(s) ao longo do período.` : 'Nenhum objetivo de sessão registrado neste período.');

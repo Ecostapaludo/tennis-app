@@ -314,7 +314,7 @@ function buildHistoryView(state, sessions, groups) {
       return;
     }
     listContainer.appendChild(h('p', { style: 'font-size:12.5px;color:var(--text-secondary);margin-bottom:8px' }, [
-      `${matched.length} sessão${matched.length === 1 ? '' : 'ões'} encontrada${matched.length === 1 ? '' : 's'}.`,
+      matched.length === 1 ? '1 sessão encontrada.' : `${matched.length} sessões encontradas.`,
     ]));
     matched.forEach((s) => {
       listContainer.appendChild(h('div', { class: 'session-item' }, [
