@@ -47,9 +47,24 @@ function hourRanges(hours) {
   return ranges;
 }
 
+// Uma sessao "pertence" a turma quando o conjunto de atletas bate exatamente
+// com os membros da turma (mesmo criterio usado no backend em training.js
+// para achar a turma de uma sessao) -- usado so pra puxar o objetivo
+// planejado daquele dia, se ja houver uma sessao criada.
+function findSessionForGroupOnDate(sessions, group, dateStr) {
+  const groupIds = new Set((group.athletes || []).map((a) => a.id));
+  if (!groupIds.size) return null;
+  return (sessions || []).find((s) => {
+    if (s.date.slice(0, 10) !== dateStr) return false;
+    const sIds = (s.athletes || []).map((a) => a.id);
+    return sIds.length === groupIds.size && sIds.every((id) => groupIds.has(id));
+  }) || null;
+}
+
 // Mostra as turmas da semana (segunda a domingo), dia a dia, ordenadas por horario —
 // a partir do horario fixo cadastrado em cada turma (ver Turmas), nao de sessoes avulsas.
-function buildWeekCard(groups) {
+// Quando ja existe uma sessao planejada pra aquele dia da turma, mostra o objetivo dela.
+function buildWeekCard(groups, sessions) {
   const weekStart = mondayOfWeek(new Date());
   const weekDates = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(weekStart);
@@ -96,9 +111,13 @@ function buildWeekCard(groups) {
         const timeLabel = startHour === endHour
           ? `${String(startHour).padStart(2, '0')}:00`
           : `${String(startHour).padStart(2, '0')}:00 às ${String(endHour).padStart(2, '0')}:00`;
+        const session = findSessionForGroupOnDate(sessions, group, dateStr);
         dayCell.appendChild(h('div', { class: 'dash-week-session' }, [
           h('span', { class: 'dash-week-time', style: `color:${colorOf.get(group.id)}` }, [timeLabel]),
           h('div', { class: 'dash-week-session-title' }, [group.name]),
+          session && session.objective
+            ? h('p', { class: 'dash-week-objective' }, [session.objective])
+            : h('p', { class: 'dash-week-objective muted' }, ['Sem objetivo definido ainda.']),
         ]));
       });
     }
@@ -278,10 +297,11 @@ export async function renderDashboard(main, ctx) {
   }
 
   const canEditTournaments = ctx.user.role === 'head_coach';
-  const [groups, athletes, tournaments] = await Promise.all([
+  const [groups, athletes, tournaments, sessions] = await Promise.all([
     api.get('/api/groups'),
     api.get('/api/athletes'),
     api.get('/api/tournaments'),
+    api.get('/api/training-sessions'),
   ]);
   const activeAthletes = athletes.filter((a) => a.active);
 
@@ -299,7 +319,7 @@ export async function renderDashboard(main, ctx) {
 
   main.appendChild(buildAthleteSummaryCard(activeAthletes));
 
-  main.appendChild(buildWeekCard(groups));
+  main.appendChild(buildWeekCard(groups, sessions));
 
   main.appendChild(buildTournamentsCard(tournaments, athletes, canEditTournaments, () => renderDashboard(main, ctx)));
 
