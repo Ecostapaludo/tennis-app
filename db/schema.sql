@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS athlete_groups (
   schedule_slots TEXT,
   is_dropin INTEGER NOT NULL DEFAULT 0,
   head_coach_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  ball_stage TEXT CHECK (ball_stage IS NULL OR ball_stage IN ('vermelha','laranja','verde','amarela')),
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

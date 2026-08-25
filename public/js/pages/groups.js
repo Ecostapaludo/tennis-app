@@ -1,5 +1,6 @@
 import { h, clear, confirmModal } from '../dom.js';
 import { api } from '../api.js';
+import { BALL_STAGE_OPTS, BALL_STAGE_LABEL, BALL_STAGE_EMOJI } from '../kidsStages.js';
 
 const WEEKDAYS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
 const HOURS = Array.from({ length: 16 }, (_, i) => 6 + i); // 06h..21h (inicio de cada slot de 1h)
@@ -56,6 +57,9 @@ export async function renderGroups(main, ctx) {
           h('h3', {}, [g.name]),
           h('p', {}, [`${g.athletes.length} aluno${g.athletes.length === 1 ? '' : 's'}`]),
           h('span', { class: `badge ${g.is_dropin ? 'badge-neutral' : 'badge-torneio'}` }, [g.is_dropin ? 'Aula avulsa' : (g.schedule_time || 'Horário não definido')]),
+          g.ball_stage
+            ? h('span', { class: 'badge badge-neutral', style: 'margin-left:6px' }, [`${BALL_STAGE_EMOJI[g.ball_stage] || ''} ${BALL_STAGE_LABEL[g.ball_stage] || g.ball_stage}`])
+            : null,
         ]),
         canEdit ? h('div', {}, [
           h('button', { class: 'btn btn-sm', type: 'button', onClick: () => openGroupModal(g, athletes, headCoaches, trainerUsers, async () => renderGroups(main, ctx)) }, ['Editar']),
@@ -118,6 +122,18 @@ function openGroupModal(group, athletes, headCoaches, trainerUsers, onDone) {
     return label;
   }));
 
+  const ballStageSelect = h('select', {}, [
+    h('option', { value: '' }, ['Não definido']),
+    ...BALL_STAGE_OPTS.map((s) => h('option', { value: s.value, selected: !!(group && group.ball_stage === s.value) }, [`${BALL_STAGE_EMOJI[s.value]} ${s.label}`])),
+  ]);
+  const ballStageField = h('div', { class: 'form-field span-2' }, [
+    h('label', {}, ['Tipo de bola da turma']),
+    ballStageSelect,
+    h('p', { style: 'font-size:11.5px;color:var(--text-muted);margin-top:4px' }, [
+      'Restringe quais drills podem ser usados nas sessões dessa turma (mini-tênis por estágio, ou geral para amarela/adulto).',
+    ]),
+  ]);
+
   const headCoachSelect = h('select', {}, [
     h('option', { value: '' }, ['Nenhum definido']),
     ...headCoaches.map((u) => h('option', { value: u.id, selected: !!(group && group.headCoach && group.headCoach.id === u.id) }, [u.name])),
@@ -150,6 +166,7 @@ function openGroupModal(group, athletes, headCoaches, trainerUsers, onDone) {
           scheduleTime: dropinCb.checked ? null : summarizeSlots(scheduleSlots),
           headCoachId: headCoachSelect.value ? Number(headCoachSelect.value) : null,
           trainerIds: Array.from(trainerIds),
+          ballStage: ballStageSelect.value || null,
         };
         if (group) await api.put(`/api/groups/${group.id}`, payload);
         else await api.post('/api/groups', payload);
@@ -164,6 +181,7 @@ function openGroupModal(group, athletes, headCoaches, trainerUsers, onDone) {
       h('div', { class: 'form-field span-2' }, [h('label', {}, ['Descrição']), description]),
       scheduleField,
       dropinField,
+      ballStageField,
     ]),
     h('div', { class: 'form-field', style: 'margin-top:10px' }, [
       h('label', {}, ['Alunos da turma']),

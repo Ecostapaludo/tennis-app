@@ -2,6 +2,11 @@ import db from '../../db/db.js';
 import { sendJson, readJsonBody } from '../lib/router.js';
 
 const WEEKDAYS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+const BALL_STAGES = new Set(['vermelha', 'laranja', 'verde', 'amarela']);
+
+function normalizeBallStage(ballStage) {
+  return BALL_STAGES.has(ballStage) ? ballStage : null;
+}
 
 function attachMembers(group) {
   const rows = db.prepare(
@@ -63,13 +68,14 @@ export function registerGroupRoutes(router) {
     const schErr = scheduleError(isDropin, b.scheduleSlots);
     if (schErr) return sendJson(res, 400, { error: schErr });
     const info = db.prepare(
-      'INSERT INTO athlete_groups (created_by, name, description, schedule_time, schedule_slots, is_dropin, head_coach_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO athlete_groups (created_by, name, description, schedule_time, schedule_slots, is_dropin, head_coach_id, ball_stage) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     ).run(
       user.id, b.name.trim(), b.description || null,
       isDropin ? null : (b.scheduleTime || null),
       isDropin ? null : JSON.stringify(b.scheduleSlots),
       isDropin ? 1 : 0,
-      b.headCoachId || null
+      b.headCoachId || null,
+      normalizeBallStage(b.ballStage)
     );
     const groupId = Number(info.lastInsertRowid);
     if (Array.isArray(b.athleteIds)) {
@@ -92,13 +98,14 @@ export function registerGroupRoutes(router) {
       : (existing.schedule_slots ? JSON.parse(existing.schedule_slots) : []);
     const schErr = scheduleError(isDropin, scheduleSlots);
     if (schErr) return sendJson(res, 400, { error: schErr });
-    db.prepare('UPDATE athlete_groups SET name=?, description=?, schedule_time=?, schedule_slots=?, is_dropin=?, head_coach_id=? WHERE id=?').run(
+    db.prepare('UPDATE athlete_groups SET name=?, description=?, schedule_time=?, schedule_slots=?, is_dropin=?, head_coach_id=?, ball_stage=? WHERE id=?').run(
       b.name !== undefined ? b.name.trim() : existing.name,
       b.description !== undefined ? b.description : existing.description,
       isDropin ? null : (b.scheduleTime !== undefined ? b.scheduleTime : existing.schedule_time),
       isDropin ? null : JSON.stringify(scheduleSlots),
       isDropin ? 1 : 0,
       b.headCoachId !== undefined ? (b.headCoachId || null) : existing.head_coach_id,
+      b.ballStage !== undefined ? normalizeBallStage(b.ballStage) : existing.ball_stage,
       id
     );
     if (Array.isArray(b.athleteIds)) {

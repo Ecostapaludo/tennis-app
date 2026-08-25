@@ -1,7 +1,7 @@
 import { h, clear, confirmModal } from '../dom.js';
 import { api } from '../api.js';
 import { FOCUS_OPTS, FOCUS_LABEL, TECHNICAL_SUBCATEGORY_OPTS, TECHNICAL_SUBCATEGORY_LABEL } from '../focus.js';
-import { KIDS_STAGE_OPTS, KIDS_STAGE_LABEL } from '../kidsStages.js';
+import { KIDS_STAGE_OPTS, KIDS_STAGE_LABEL, BALL_STAGE_LABEL, BALL_STAGE_EMOJI, ballStageToKidsStage } from '../kidsStages.js';
 import { courtDiagramSVG } from '../components/courtDiagram.js';
 
 const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -53,7 +53,10 @@ function formatHour(hour) {
 // formulario de nova sessao quanto no modal de editar atletas de uma sessao
 // ja existente. onGroupSelect (opcional) e chamado quando uma turma e
 // marcada via chip, para permitir puxar o horario cadastrado dela.
-function buildAthletePicker(athletes, groups, preselectedIds, onGroupSelect) {
+// onSelectionChange (opcional) e chamado a cada mudanca de selecao (checkbox
+// individual ou chip de turma), para permitir recalcular restricoes de drill
+// com base nas turmas atualmente selecionadas.
+function buildAthletePicker(athletes, groups, preselectedIds, onGroupSelect, onSelectionChange) {
   if (!athletes.length) {
     return {
       el: h('p', { style: 'font-size:13px;color:var(--status-warning)' }, [
@@ -65,27 +68,30 @@ function buildAthletePicker(athletes, groups, preselectedIds, onGroupSelect) {
   }
   const checkedIds = new Set(preselectedIds || []);
   const athleteRefs = new Map();
+
+  function setAthleteChecked(id, checked) {
+    if (checked) checkedIds.add(id); else checkedIds.delete(id);
+    const ref = athleteRefs.get(id);
+    if (ref) { ref.cb.checked = checked; ref.label.classList.toggle('checked', checked); }
+    if (onSelectionChange) onSelectionChange();
+  }
+
   const tagList = h('div', { class: 'tag-list' }, athletes.map((a) => {
     const cb = h('input', {
       type: 'checkbox', checked: checkedIds.has(a.id),
-      onChange: (e) => { if (e.target.checked) checkedIds.add(a.id); else checkedIds.delete(a.id); label.classList.toggle('checked', e.target.checked); },
+      onChange: (e) => setAthleteChecked(a.id, e.target.checked),
     });
     const label = h('label', { class: `tag-checkbox${checkedIds.has(a.id) ? ' checked' : ''}` }, [cb, a.name]);
     athleteRefs.set(a.id, { cb, label });
     return label;
   }));
 
-  function setAthleteChecked(id, checked) {
-    if (checked) checkedIds.add(id); else checkedIds.delete(id);
-    const ref = athleteRefs.get(id);
-    if (ref) { ref.cb.checked = checked; ref.label.classList.toggle('checked', checked); }
-  }
-
   const groupsWithMembers = (groups || []).filter((g) => g.athletes && g.athletes.length);
   const chipRow = groupsWithMembers.length
     ? h('div', { class: 'chip-row', style: 'margin-bottom:12px' }, groupsWithMembers.map((g) => {
         const isSelected = () => g.athletes.every((a) => checkedIds.has(a.id));
-        const chip = h('button', { type: 'button', class: `chip${isSelected() ? ' active' : ''}` }, [`${g.name} (${g.athletes.length})`]);
+        const stageEmoji = g.ball_stage ? `${BALL_STAGE_EMOJI[g.ball_stage] || ''} ` : '';
+        const chip = h('button', { type: 'button', class: `chip${isSelected() ? ' active' : ''}` }, [`${stageEmoji}${g.name} (${g.athletes.length})`]);
         chip.addEventListener('click', () => {
           const shouldSelect = !isSelected();
           g.athletes.forEach((a) => setAthleteChecked(a.id, shouldSelect));
@@ -510,8 +516,52 @@ function buildAddForm(dateStr, athletes, groups, drills, role, weekFocusMap, onD
     endTime.value = formatHour(curEnd === null ? range.endHour : Math.max(curEnd, range.endHour));
   }
 
+  // Redirecionamento mutavel: buildAthletePicker precisa do callback antes de
+  // refreshAllDrillFields existir (ela por sua vez depende do athletePicker
+  // ja criado, para ler quais turmas estao selecionadas) -- essa indirecao
+  // resolve a dependencia circular.
+  let notifySelectionChange = () => {};
   const { groupsForDay, athletesForDay } = groupsAndAthletesForDate(dateStr, groups);
-  const athletePicker = buildAthletePicker(athletesForDay, groupsForDay, [], applyGroupSchedule);
+  const athletePicker = buildAthletePicker(athletesForDay, groupsForDay, [], applyGroupSchedule, () => notifySelectionChange());
+
+  // Turmas com TODOS os atletas atualmente marcados e com tipo de bola definido
+  // condicionam quais drills podem ser usados (nao misturar niveis de bola).
+  function activeBallStagesFromSelection() {
+    const selectedIds = new Set(athletePicker.getSelectedIds());
+    const stages = new Set();
+    groupsForDay.forEach((g) => {
+      if (g.athletes.length && g.athletes.every((a) => selectedIds.has(a.id)) && g.ball_stage) {
+        stages.add(g.ball_stage);
+      }
+    });
+    return stages;
+  }
+
+  // Combina a restricao da aba ativa (Bola vermelha/laranja/verde) com a das
+  // turmas selecionadas -- null = sem restricao; Set vazio = combinacao
+  // contraditoria (ex: turmas de bolas diferentes juntas).
+  function allowedKidsStages() {
+    let allowed = activeTab && activeTab !== 'geral' ? new Set([activeTab]) : null;
+    const turmaStages = activeBallStagesFromSelection();
+    if (turmaStages.size === 1) {
+      const turmaAllowed = new Set([ballStageToKidsStage([...turmaStages][0])]);
+      allowed = allowed ? new Set([...allowed].filter((v) => turmaAllowed.has(v))) : turmaAllowed;
+    } else if (turmaStages.size > 1) {
+      // Turmas de bolas diferentes combinadas na mesma sessao -- bloqueia os
+      // drills ate a selecao de atletas ficar restrita a um so estagio, em vez
+      // de permitir misturar niveis.
+      allowed = new Set();
+    }
+    return allowed;
+  }
+
+  function stageRestrictionLabel() {
+    if (activeTab && activeTab !== 'geral') return KIDS_STAGE_LABEL[activeTab];
+    const turmaStages = activeBallStagesFromSelection();
+    if (turmaStages.size === 1) return BALL_STAGE_LABEL[[...turmaStages][0]];
+    if (turmaStages.size > 1) return 'turmas com bolas diferentes selecionadas';
+    return null;
+  }
 
   const weekFocusEntry = weekFocusMap.get(mondayOfWeek(dateStr)) || null;
   const weekFocusCategory = weekFocusEntry ? weekFocusEntry.focusCategory : null;
@@ -533,20 +583,34 @@ function buildAddForm(dateStr, athletes, groups, drills, role, weekFocusMap, onD
     if (subcategoryRestricted) {
       list = list.filter((d) => d.subcategory === weekFocusSubcategory);
     }
-    const stageRestricted = activeTab && activeTab !== 'geral';
+    const allowed = allowedKidsStages();
+    const stageRestricted = allowed !== null;
     if (stageRestricted) {
-      list = list.filter((d) => d.kids_stage === activeTab);
+      list = list.filter((d) => allowed.has(d.kids_stage || null));
     }
+    // Selecoes de drills que nao pertencem mais ao estagio permitido (ex: turma
+    // trocada apos escolher drills) saem automaticamente da sessao.
+    (drills || []).forEach((d) => {
+      if (d.focus_category === category && selectedDrillIds.has(d.id) && !list.some((l) => l.id === d.id)) {
+        selectedDrillIds.delete(d.id);
+      }
+    });
     if (!list.length) {
       if (subcategoryRestricted) {
         return h('p', { style: 'font-size:11.5px;color:var(--text-muted);margin-top:4px' }, [
           `Foco da semana é "${TECHNICAL_SUBCATEGORY_LABEL[weekFocusSubcategory]}" — sem drills disponíveis aqui.`,
         ]);
       }
+      if (stageRestricted && activeBallStagesFromSelection().size > 1) {
+        return h('p', { style: 'font-size:11.5px;color:var(--status-warning)' }, [
+          'As turmas selecionadas têm tipos de bola diferentes — selecione atletas de um só estágio para liberar os drills.',
+        ]);
+      }
       if (stageRestricted) {
+        const label = stageRestrictionLabel();
         return role === 'head_coach'
-          ? h('a', { href: '#/drills', style: 'font-size:12px;display:inline-block;margin-top:4px' }, [`+ Cadastrar drills de ${KIDS_STAGE_LABEL[activeTab]} na biblioteca`])
-          : h('p', { style: 'font-size:11.5px;color:var(--text-muted);margin-top:4px' }, [`Nenhum drill de ${KIDS_STAGE_LABEL[activeTab]} cadastrado para este foco.`]);
+          ? h('a', { href: '#/drills', style: 'font-size:12px;display:inline-block;margin-top:4px' }, [`+ Cadastrar drills de ${label} na biblioteca`])
+          : h('p', { style: 'font-size:11.5px;color:var(--text-muted);margin-top:4px' }, [`Nenhum drill de ${label} cadastrado para este foco.`]);
       }
       return role === 'head_coach'
         ? h('a', { href: '#/drills', style: 'font-size:12px;display:inline-block;margin-top:4px' }, ['+ Cadastrar drills na biblioteca'])
@@ -583,6 +647,19 @@ function buildAddForm(dateStr, athletes, groups, drills, role, weekFocusMap, onD
 
     return h('div', {}, [summary, openBtn]);
   }
+
+  // Containers reativos: quando a selecao de atletas/turmas muda, o estagio de
+  // bola permitido pode mudar, entao os 4 campos de drill sao re-renderizados.
+  const DRILL_CATEGORIES = ['technical', 'physical', 'tactical', 'mental'];
+  const drillContainers = Object.fromEntries(DRILL_CATEGORIES.map((cat) => [cat, h('div')]));
+  function refreshAllDrillFields() {
+    DRILL_CATEGORIES.forEach((cat) => {
+      clear(drillContainers[cat]);
+      drillContainers[cat].appendChild(drillFieldFor(cat));
+    });
+  }
+  notifySelectionChange = refreshAllDrillFields;
+  refreshAllDrillFields();
 
   const form = h('form', {
     class: 'inline-session-form',
@@ -624,10 +701,10 @@ function buildAddForm(dateStr, athletes, groups, drills, role, weekFocusMap, onD
       h('div', { class: 'form-field' }, [h('label', {}, ['Fim']), endTime]),
       h('div', { class: 'form-field span-2' }, [h('label', {}, ['Título']), title]),
       h('div', { class: 'form-field span-2' }, [h('label', {}, ['Objetivo']), objective]),
-      h('div', { class: 'form-field' }, [h('label', {}, ['Foco técnico']), focusTechnical, drillFieldFor('technical')]),
-      h('div', { class: 'form-field' }, [h('label', {}, ['Foco físico']), focusPhysical, drillFieldFor('physical')]),
-      h('div', { class: 'form-field' }, [h('label', {}, ['Foco tático']), focusTactical, drillFieldFor('tactical')]),
-      h('div', { class: 'form-field' }, [h('label', {}, ['Foco mental']), focusMental, drillFieldFor('mental')]),
+      h('div', { class: 'form-field' }, [h('label', {}, ['Foco técnico']), focusTechnical, drillContainers.technical]),
+      h('div', { class: 'form-field' }, [h('label', {}, ['Foco físico']), focusPhysical, drillContainers.physical]),
+      h('div', { class: 'form-field' }, [h('label', {}, ['Foco tático']), focusTactical, drillContainers.tactical]),
+      h('div', { class: 'form-field' }, [h('label', {}, ['Foco mental']), focusMental, drillContainers.mental]),
       h('div', { class: 'form-field span-2' }, [h('label', {}, ['Notas']), notes]),
     ]),
     h('div', { style: 'margin-top:10px' }, [athletePicker.el]),

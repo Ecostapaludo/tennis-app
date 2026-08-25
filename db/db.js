@@ -68,6 +68,7 @@ ensureColumn('stroke_video_analyses', 'biomech_report_json', 'TEXT');
 ensureColumn('stroke_video_analyses', 'pose_landmarks_json', 'TEXT');
 ensureColumn('drills', 'kids_stage', 'TEXT');
 ensureColumn('training_sessions', 'kids_stage', 'TEXT');
+ensureColumn('athlete_groups', 'ball_stage', 'TEXT');
 
 export default db;
 export { dbPath };
