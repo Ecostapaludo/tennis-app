@@ -231,6 +231,24 @@ CREATE TABLE IF NOT EXISTS match_reports (
   source TEXT NOT NULL DEFAULT 'heuristica'
 );
 
+-- Relatorio de IA sobre um "ciclo" (intervalo de datas, opcionalmente restrito
+-- a uma turma) de sessoes de treino ja planejadas -- sempre calculado por
+-- HEURISTICA a partir das sessoes/drills/focos reais daquele periodo, com
+-- reescrita opcional por Claude (ANTHROPIC_API_KEY), mesmo padrao de
+-- match_reports/video_biomech_narratives. group_id nulo = todas as turmas.
+CREATE TABLE IF NOT EXISTS training_period_reports (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  group_id INTEGER REFERENCES athlete_groups(id) ON DELETE CASCADE,
+  range_start TEXT NOT NULL,
+  range_end TEXT NOT NULL,
+  generated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  session_count INTEGER NOT NULL,
+  summary_text TEXT NOT NULL,
+  focus_breakdown_json TEXT NOT NULL,
+  drills_used_json TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'heuristica'
+);
+
 CREATE TABLE IF NOT EXISTS stroke_video_analyses (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   athlete_id INTEGER NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,

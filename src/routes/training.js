@@ -1,6 +1,7 @@
 import db from '../../db/db.js';
 import { sendJson, readJsonBody } from '../lib/router.js';
 import { scopeAthleteIds } from './athletes.js';
+import { buildHeuristicPeriodReport, refinePeriodReportWithClaude } from '../lib/trainingPeriodReport.js';
 
 const FOCUS_LABEL = { technical: 'Técnico', physical: 'Físico', tactical: 'Tático', mental: 'Mental' };
 const TECHNICAL_SUBCATEGORY_LABEL = { serve: 'Saque', volley_smash: 'Voleio/Smash', forehand: 'Forehand', backhand: 'Backhand/Slice' };
@@ -387,6 +388,84 @@ export function registerTrainingRoutes(router) {
       'UPDATE training_session_athletes SET attendance = ? WHERE session_id = ? AND athlete_id = ?'
     ).run(b.attendance, sessionId, athleteId);
     if (info.changes === 0) return sendJson(res, 404, { error: 'Atleta não vinculado a esta sessão.' });
+    sendJson(res, 200, { ok: true });
+  });
+
+  function sessionsInRange(rangeStart, rangeEnd, groupId) {
+    let rows = db.prepare('SELECT * FROM training_sessions WHERE date >= ? AND date <= ? ORDER BY date, start_time')
+      .all(rangeStart, rangeEnd).map(attachExtras);
+    if (groupId) {
+      const memberIds = db.prepare('SELECT athlete_id FROM athlete_group_members WHERE group_id = ?').all(groupId).map((r) => r.athlete_id);
+      const memberSet = new Set(memberIds);
+      rows = rows.filter((s) => {
+        const sIds = (s.athletes || []).map((a) => a.id);
+        return memberSet.size > 0 && sIds.length === memberSet.size && sIds.every((id) => memberSet.has(id));
+      });
+    }
+    return rows;
+  }
+
+  function attachPeriodReport(row) {
+    return {
+      id: row.id, groupId: row.group_id, rangeStart: row.range_start, rangeEnd: row.range_end,
+      generatedAt: row.generated_at, sessionCount: row.session_count, summary: row.summary_text,
+      focusBreakdown: JSON.parse(row.focus_breakdown_json), drillsUsed: JSON.parse(row.drills_used_json),
+      source: row.source,
+    };
+  }
+
+  // Relatorio de IA sobre um ciclo (intervalo de datas, opcionalmente restrito a
+  // uma turma) das sessoes de treino ja planejadas -- ver src/lib/trainingPeriodReport.js
+  router.get('/api/training-reports', async (req, res, params, user, query) => {
+    const groupId = query.groupId ? Number(query.groupId) : null;
+    let rows;
+    if (query.rangeStart && query.rangeEnd) {
+      rows = groupId
+        ? db.prepare('SELECT * FROM training_period_reports WHERE range_start = ? AND range_end = ? AND group_id = ? ORDER BY generated_at DESC')
+            .all(query.rangeStart, query.rangeEnd, groupId)
+        : db.prepare('SELECT * FROM training_period_reports WHERE range_start = ? AND range_end = ? AND group_id IS NULL ORDER BY generated_at DESC')
+            .all(query.rangeStart, query.rangeEnd);
+    } else {
+      rows = db.prepare('SELECT * FROM training_period_reports ORDER BY generated_at DESC').all();
+    }
+    sendJson(res, 200, rows.map(attachPeriodReport));
+  });
+
+  router.post('/api/training-reports', async (req, res, params, user) => {
+    const b = await readJsonBody(req);
+    if (!b.rangeStart || !b.rangeEnd) return sendJson(res, 400, { error: 'Período (rangeStart/rangeEnd) é obrigatório.' });
+    if (b.rangeEnd < b.rangeStart) return sendJson(res, 400, { error: 'A data final não pode ser antes da data inicial.' });
+    const groupId = b.groupId ? Number(b.groupId) : null;
+    let scopeLabel = null;
+    if (groupId) {
+      const group = db.prepare('SELECT name FROM athlete_groups WHERE id = ?').get(groupId);
+      if (!group) return sendJson(res, 404, { error: 'Turma não encontrada.' });
+      scopeLabel = group.name;
+    }
+    const sessions = sessionsInRange(b.rangeStart, b.rangeEnd, groupId);
+    const report = buildHeuristicPeriodReport(sessions, { rangeStart: b.rangeStart, rangeEnd: b.rangeEnd, scopeLabel });
+
+    let finalSummary = report.summary;
+    let source = 'heuristica';
+    if (b.useAi) {
+      const refined = await refinePeriodReportWithClaude(report, scopeLabel);
+      if (refined) { finalSummary = refined; source = 'ia_claude'; }
+    }
+
+    const info = db.prepare(
+      `INSERT INTO training_period_reports (group_id, range_start, range_end, session_count, summary_text, focus_breakdown_json, drills_used_json, source)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(groupId, b.rangeStart, b.rangeEnd, report.sessionCount, finalSummary, JSON.stringify(report.focusBreakdown), JSON.stringify(report.drillsUsed), source);
+
+    sendJson(res, 201, {
+      id: Number(info.lastInsertRowid), groupId, rangeStart: b.rangeStart, rangeEnd: b.rangeEnd,
+      sessionCount: report.sessionCount, summary: finalSummary, focusBreakdown: report.focusBreakdown,
+      drillsUsed: report.drillsUsed, source, aiAvailable: Boolean(process.env.ANTHROPIC_API_KEY),
+    });
+  });
+
+  router.delete('/api/training-reports/:id', async (req, res, params) => {
+    db.prepare('DELETE FROM training_period_reports WHERE id = ?').run(Number(params.id));
     sendJson(res, 200, { ok: true });
   });
 }

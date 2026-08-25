@@ -1,4 +1,4 @@
-import { h, clear, confirmModal } from '../dom.js';
+import { h, clear, confirmModal, fmtDate } from '../dom.js';
 import { api } from '../api.js';
 import { FOCUS_OPTS, FOCUS_LABEL, TECHNICAL_SUBCATEGORY_OPTS, TECHNICAL_SUBCATEGORY_LABEL } from '../focus.js';
 import { KIDS_STAGE_OPTS, KIDS_STAGE_LABEL, BALL_STAGE_LABEL, BALL_STAGE_EMOJI, ballStageToKidsStage } from '../kidsStages.js';
@@ -142,7 +142,12 @@ export async function renderTraining(main, ctx) {
   clear(main);
 
   const today = new Date();
-  const state = { viewMonth: today.getMonth(), viewYear: today.getFullYear(), selectedDate: toISODate(today), activeTab: 'geral' };
+  const monthAgo = new Date(today);
+  monthAgo.setDate(monthAgo.getDate() - 30);
+  const state = {
+    viewMonth: today.getMonth(), viewYear: today.getFullYear(), selectedDate: toISODate(today), activeTab: 'geral',
+    historyRangeStart: toISODate(monthAgo), historyRangeEnd: toISODate(today), historyGroupId: '',
+  };
   const toWeekFocusEntry = (r) => ({ focusCategory: r.focus_category, subcategory: r.subcategory || null, secondaryFocusCategory: r.secondary_focus_category || null });
   let weekFocusMap = new Map(weeklyFocusRows.map((r) => [r.week_start, toWeekFocusEntry(r)]));
 
@@ -215,6 +220,16 @@ export async function renderTraining(main, ctx) {
     if (canEdit) {
       tabBarContainer.appendChild(buildPlanTabBar(state, (tab) => { state.activeTab = tab; draw(); }));
     }
+
+    if (state.activeTab === 'historico') {
+      clear(focusBarContainer);
+      clear(layout);
+      layout.className = '';
+      if (canEdit) layout.appendChild(buildHistoryView(state, sessions, groups));
+      return;
+    }
+
+    layout.className = 'calendar-layout';
     clear(focusBarContainer);
     if (canEdit) {
       focusBarContainer.appendChild(buildWeekFocusBar(state, weekFocusMap, isHeadCoach, setWeekFocus, clearWeekFocus, setWeekSubfocus, setWeekSecondaryFocus));
@@ -229,7 +244,7 @@ export async function renderTraining(main, ctx) {
   draw();
 }
 
-const PLAN_TABS = [{ value: 'geral', label: 'Calendário' }, ...KIDS_STAGE_OPTS];
+const PLAN_TABS = [{ value: 'geral', label: 'Calendário' }, ...KIDS_STAGE_OPTS, { value: 'historico', label: '📋 Histórico' }];
 
 // Aba opcional para montar planos de treino de mini-tenis por estagio (bola
 // vermelha/laranja/verde): mesma logica de calendario/sessao de sempre, so
@@ -241,6 +256,179 @@ function buildPlanTabBar(state, onSelect) {
     chip.addEventListener('click', () => onSelect(t.value));
     return chip;
   }));
+}
+
+const REPORT_SOURCE_LABEL = { ia_claude: 'IA (Claude)', heuristica: 'Heurística' };
+
+// Aba de historico: filtra as sessoes ja planejadas por periodo (+ turma
+// opcional) pra dar uma visao consolidada do que ja foi feito, e permite
+// gerar um relatorio de IA (heuristico, com refino opcional por Claude)
+// analisando o que foi trabalhado naquele ciclo -- ver POST /api/training-reports.
+function buildHistoryView(state, sessions, groups) {
+  const wrap = h('div', { class: 'card' }, [
+    h('h3', {}, ['Histórico e relatório do ciclo']),
+    h('p', {}, ['Filtre um período (e, se quiser, uma turma) para ver os planos já feitos e gerar uma análise do que foi trabalhado.']),
+  ]);
+
+  const startInput = h('input', { type: 'date', value: state.historyRangeStart });
+  const endInput = h('input', { type: 'date', value: state.historyRangeEnd });
+  const groupsWithMembers = (groups || []).filter((g) => g.athletes && g.athletes.length);
+  const groupSelect = h('select', {}, [
+    h('option', { value: '' }, ['Todas as turmas']),
+    ...groupsWithMembers.map((g) => h('option', { value: String(g.id) }, [g.name])),
+  ]);
+  groupSelect.value = state.historyGroupId || '';
+
+  wrap.appendChild(h('div', { class: 'form-grid', style: 'margin-top:6px' }, [
+    h('div', { class: 'form-field' }, [h('label', {}, ['De']), startInput]),
+    h('div', { class: 'form-field' }, [h('label', {}, ['Até']), endInput]),
+    h('div', { class: 'form-field' }, [h('label', {}, ['Turma']), groupSelect]),
+  ]));
+
+  const listContainer = h('div', { style: 'margin-top:14px' });
+  const reportContainer = h('div', { style: 'margin-top:18px' });
+  wrap.appendChild(listContainer);
+  wrap.appendChild(h('div', { style: 'border-top:1px solid var(--border);margin-top:18px' }));
+  wrap.appendChild(reportContainer);
+
+  function currentGroup() {
+    return state.historyGroupId ? groupsWithMembers.find((g) => String(g.id) === String(state.historyGroupId)) : null;
+  }
+
+  function matchesFilter(s) {
+    const dateStr = s.date.slice(0, 10);
+    if (dateStr < state.historyRangeStart || dateStr > state.historyRangeEnd) return false;
+    const group = currentGroup();
+    if (!group) return true;
+    const groupIds = new Set(group.athletes.map((a) => a.id));
+    const sIds = (s.athletes || []).map((a) => a.id);
+    return sIds.length === groupIds.size && sIds.every((id) => groupIds.has(id));
+  }
+
+  function refreshList() {
+    clear(listContainer);
+    const matched = sessions.filter(matchesFilter).slice()
+      .sort((a, b) => a.date.localeCompare(b.date) || (a.start_time || '').localeCompare(b.start_time || ''));
+    if (!matched.length) {
+      listContainer.appendChild(h('div', { class: 'empty-state' }, ['Nenhuma sessão planejada nesse período/turma.']));
+      return;
+    }
+    listContainer.appendChild(h('p', { style: 'font-size:12.5px;color:var(--text-secondary);margin-bottom:8px' }, [
+      `${matched.length} sessão${matched.length === 1 ? '' : 'ões'} encontrada${matched.length === 1 ? '' : 's'}.`,
+    ]));
+    matched.forEach((s) => {
+      listContainer.appendChild(h('div', { class: 'session-item' }, [
+        h('div', { class: 'page-header', style: 'margin-bottom:2px' }, [
+          h('div', {}, [
+            h('h4', { style: 'margin:0' }, [s.title]),
+            h('p', { style: 'margin:2px 0 0' }, [
+              `${fmtDate(s.date)}${s.start_time ? ` · ${s.start_time}${s.end_time ? '–' + s.end_time : ''}` : ''}`,
+            ]),
+          ]),
+          s.kids_stage ? h('span', { class: 'badge badge-neutral' }, [KIDS_STAGE_LABEL[s.kids_stage] || s.kids_stage]) : null,
+        ]),
+        s.objective ? h('p', { style: 'margin:0;font-size:13px' }, [h('strong', {}, ['Objetivo: ']), s.objective]) : null,
+        h('p', { style: 'margin:2px 0 0;font-size:12px;color:var(--text-secondary)' }, [
+          `${(s.athletes || []).length} atleta(s) · ${(s.drills || []).length} drill(s)`,
+        ]),
+      ]));
+    });
+  }
+
+  function buildReportCard(r, onReload) {
+    const focusBadges = (r.focusBreakdown || []).filter((f) => f.count > 0).map((f) => (
+      h('span', { class: 'badge badge-neutral' }, [`${f.label}: ${f.count} (${f.pct}%)`])
+    ));
+    return h('div', { class: 'card', style: 'margin-top:10px;background:var(--surface-2)' }, [
+      h('div', { class: 'page-header', style: 'margin-bottom:6px' }, [
+        h('p', { style: 'font-size:12px;color:var(--text-secondary);margin:0' }, [fmtDate(r.generatedAt)]),
+        h('div', {}, [
+          h('span', { class: 'badge badge-neutral', style: 'margin-right:6px' }, [REPORT_SOURCE_LABEL[r.source] || r.source]),
+          h('button', {
+            class: 'btn btn-sm btn-danger', type: 'button',
+            onClick: () => confirmModal('Excluir este relatório?', async () => {
+              await api.del(`/api/training-reports/${r.id}`);
+              onReload();
+            }),
+          }, ['Excluir']),
+        ]),
+      ]),
+      h('p', { style: 'font-size:13px;white-space:pre-wrap;margin:0 0 6px' }, [r.summary]),
+      focusBadges.length ? h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px' }, focusBadges) : null,
+      r.drillsUsed && r.drillsUsed.length ? h('p', { style: 'font-size:12.5px;color:var(--text-secondary);margin:0' }, [
+        h('strong', {}, ['Drills mais usados: ']), r.drillsUsed.slice(0, 8).map((d) => `${d.name} (${d.count}x)`).join(', '),
+      ]) : null,
+    ]);
+  }
+
+  function refreshReports() {
+    clear(reportContainer);
+    reportContainer.appendChild(h('h4', {}, ['Relatório de IA do ciclo']));
+    const useAi = h('input', { type: 'checkbox' });
+    const genBtn = h('button', { class: 'btn btn-primary', type: 'button' }, ['Gerar relatório']);
+    const errorBox = h('div', { class: 'error-msg' });
+    const historyWrap = h('div', { style: 'margin-top:10px' });
+
+    reportContainer.appendChild(h('div', { class: 'form-field' }, [
+      h('label', { class: 'tag-checkbox' }, [useAi, ' usar IA generativa (Claude) se ANTHROPIC_API_KEY estiver configurada']),
+    ]));
+    reportContainer.appendChild(h('div', { class: 'form-actions', style: 'margin-top:8px' }, [genBtn]));
+    reportContainer.appendChild(errorBox);
+    reportContainer.appendChild(historyWrap);
+
+    async function loadReportHistory() {
+      const qs = new URLSearchParams({ rangeStart: state.historyRangeStart, rangeEnd: state.historyRangeEnd });
+      if (state.historyGroupId) qs.set('groupId', state.historyGroupId);
+      const reports = await api.get(`/api/training-reports?${qs.toString()}`);
+      clear(historyWrap);
+      if (!reports.length) {
+        historyWrap.appendChild(h('p', { style: 'font-size:13px;color:var(--text-muted)' }, ['Nenhum relatório gerado ainda para este período/turma.']));
+        return;
+      }
+      reports.forEach((r) => historyWrap.appendChild(buildReportCard(r, loadReportHistory)));
+    }
+
+    genBtn.addEventListener('click', async () => {
+      errorBox.textContent = '';
+      genBtn.disabled = true;
+      genBtn.textContent = 'Gerando...';
+      try {
+        const payload = { rangeStart: state.historyRangeStart, rangeEnd: state.historyRangeEnd, useAi: useAi.checked };
+        if (state.historyGroupId) payload.groupId = Number(state.historyGroupId);
+        const report = await api.post('/api/training-reports', payload);
+        if (useAi.checked && report.source !== 'ia_claude') {
+          errorBox.textContent = 'IA generativa não configurada neste ambiente (ANTHROPIC_API_KEY ausente) — relatório gerado por heurística.';
+        }
+        await loadReportHistory();
+      } catch (err) {
+        errorBox.textContent = err.message;
+      } finally {
+        genBtn.disabled = false;
+        genBtn.textContent = 'Gerar relatório';
+      }
+    });
+
+    loadReportHistory();
+  }
+
+  function applyFilters() {
+    if (endInput.value < startInput.value) {
+      endInput.value = startInput.value;
+    }
+    state.historyRangeStart = startInput.value;
+    state.historyRangeEnd = endInput.value;
+    state.historyGroupId = groupSelect.value;
+    refreshList();
+    refreshReports();
+  }
+  startInput.addEventListener('change', applyFilters);
+  endInput.addEventListener('change', applyFilters);
+  groupSelect.addEventListener('change', applyFilters);
+
+  refreshList();
+  refreshReports();
+
+  return wrap;
 }
 
 const SECONDARY_FOCUS_OPTS = FOCUS_OPTS.filter((f) => f.value !== 'technical');
