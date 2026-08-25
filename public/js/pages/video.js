@@ -96,10 +96,19 @@ export async function renderVideo(main, ctx) {
         h('td', {}, [pill(v.technique_score)]), h('td', {}, [pill(v.power_score)]),
         h('td', {}, [pill(v.consistency_score)]), h('td', {}, [pill(v.balance_score)]),
         h('td', {}, [pill(v.overall_score)]),
-        h('td', {}, [v.biomech_report ? h('button', {
-          class: 'btn btn-sm', type: 'button',
-          onClick: () => openBiomechNarrativeModal(v.id, athleteName, STROKE_LABEL[v.stroke_type] || v.stroke_type),
-        }, ['🧠 Relatório IA']) : null]),
+        h('td', {}, [h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap' }, [
+          v.biomech_report ? h('button', {
+            class: 'btn btn-sm', type: 'button',
+            onClick: () => openBiomechNarrativeModal(v.id, athleteName, STROKE_LABEL[v.stroke_type] || v.stroke_type),
+          }, ['🧠 Relatório IA']) : null,
+          h('button', {
+            class: 'btn btn-sm btn-danger', type: 'button',
+            onClick: () => confirmModal('Excluir este relatório de análise de vídeo?', async () => {
+              await api.del(`/api/video-analyses/${v.id}`);
+              await loadHistory();
+            }),
+          }, ['Excluir']),
+        ])]),
       ]))),
     ]);
     historyList.appendChild(table);
