@@ -17,10 +17,16 @@ const ZONE_DEFS = {
   quadraInteira: { color: '#4a95e8', opacity: 0.18, rects: [[C.oL, C.t, C.oR - C.oL, C.b - C.t]] },
   fundo: { color: '#eb6834', opacity: 0.38, rects: [[C.sL, C.t, C.sR - C.sL, C.svT - C.t], [C.sL, C.svB, C.sR - C.sL, C.b - C.svB]] },
   meiaQuadra: { color: '#1baf7a', opacity: 0.38, rects: [[C.sL, 70, C.sR - C.sL, 60], [C.sL, 270, C.sR - C.sL, 60]] },
-  zonaSaque: { color: '#eda100', opacity: 0.38, rects: [[C.sL, C.svT, C.cx - C.sL, C.svB - C.svT], [C.cx, C.svT, C.sR - C.cx, C.svB - C.svT]] },
+  // O sacador (marcador "A") sempre fica perto da linha de fundo DE BAIXO
+  // (p1y = C.b - 14) neste esquema -- entao a quadra de saque valida (pra onde
+  // ele de fato saca) e SEMPRE do lado oposto da rede, nunca do lado dele.
+  // Por isso o retangulo vai so de C.svT ate a rede (C.net), nao ate C.svB.
+  zonaSaque: { color: '#eda100', opacity: 0.38, rects: [[C.sL, C.svT, C.cx - C.sL, C.net - C.svT], [C.cx, C.svT, C.sR - C.cx, C.net - C.svT]] },
   cantos: { color: '#e87ba4', opacity: 0.42, rects: [[C.sL, C.t, 44, 44], [C.sR - 44, C.t, 44, 44], [C.sL, C.b - 44, 44, 44], [C.sR - 44, C.b - 44, 44, 44]] },
   centro: { color: '#2fbf2f', opacity: 0.32, rects: [[85, C.t, 30, C.b - C.t]] },
-  corredorDuplas: { color: '#8b7ae8', opacity: 0.42, rects: [[C.oL, C.t, C.sL - C.oL, C.b - C.t], [C.sR, C.t, C.oR - C.sR, C.b - C.t]] },
+  // Mesmo motivo do zonaSaque: como alvo de bola, o corredor valido e so do
+  // lado oposto do sacador/aluno (que fica embaixo) -- metade de cima.
+  corredorDuplas: { color: '#8b7ae8', opacity: 0.42, rects: [[C.oL, C.t, C.sL - C.oL, C.net - C.t], [C.sR, C.t, C.oR - C.sR, C.net - C.t]] },
   rede: { color: '#e34948', opacity: 0.42, rects: [[C.oL, 178, C.oR - C.oL, 44]] },
   curta: { color: '#eda100', opacity: 0.55, rects: [[C.sL, 150, C.sR - C.sL, 50], [C.sL, 200, C.sR - C.sL, 50]] },
 };
@@ -234,7 +240,13 @@ export function drillIllustrationSVG(drill) {
   const targetRect = (ZONE_DEFS[primaryZone] || ZONE_DEFS.quadraInteira).rects[0];
   const [tx0, ty0, tw, th] = targetRect;
   const targetX = tx0 + tw * (0.25 + rng() * 0.5);
-  const targetY = ty0 + th * (0.25 + rng() * 0.5);
+  // O aluno sempre fica perto da linha de fundo DE BAIXO (p1y) neste esquema,
+  // entao a bola so pode ter como alvo o lado de CIMA da rede (do adversario)
+  // -- nunca o mesmo lado de quem bate. Trava de seguranca: mesmo se a zona
+  // escolhida straddle a rede (ex: "rede", ou a quadra inteira como fallback),
+  // o alvo nunca cai do lado errado.
+  const rawTargetY = ty0 + th * (0.25 + rng() * 0.5);
+  const targetY = Math.min(rawTargetY, C.net - 8);
 
   const arrowId = `drill-arrow-${uid++}`;
   let trajectorySVG = '';
