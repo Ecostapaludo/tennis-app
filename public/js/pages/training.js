@@ -927,7 +927,7 @@ function openDrillPickerModal(categoryLabel, list, selectedDrillIds, onChange) {
       const diagramThumb = h('div', {
         class: `drill-diagram-thumb${isChecked ? ' expanded' : ''}`,
         title: d.court_zone || '',
-        html: isChecked ? drillIllustrationSVG(d) : courtDiagramSVG(d.court_zone),
+        html: isChecked ? drillIllustrationSVG(d) : courtDiagramSVG(d),
       });
       const card = h('label', { class: `drill-pick-card${isChecked ? ' checked' : ''}` }, [
         h('div', { class: 'drill-pick-card-body' }, [
@@ -940,7 +940,7 @@ function openDrillPickerModal(categoryLabel, list, selectedDrillIds, onChange) {
                   if (e.target.checked) selectedDrillIds.add(d.id); else selectedDrillIds.delete(d.id);
                   card.classList.toggle('checked', e.target.checked);
                   diagramThumb.classList.toggle('expanded', e.target.checked);
-                  diagramThumb.innerHTML = e.target.checked ? drillIllustrationSVG(d) : courtDiagramSVG(d.court_zone);
+                  diagramThumb.innerHTML = e.target.checked ? drillIllustrationSVG(d) : courtDiagramSVG(d);
                 },
               }),
               h('strong', {}, [d.name]),

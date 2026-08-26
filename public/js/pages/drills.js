@@ -50,7 +50,7 @@ function buildDrillGrid(list, canEdit, main, ctx) {
   list.forEach((d) => {
     grid.appendChild(h('div', { class: 'card' }, [
       h('div', { class: 'drill-card-top' }, [
-        h('div', { class: 'drill-diagram-thumb', title: d.court_zone || '', html: courtDiagramSVG(d.court_zone) }),
+        h('div', { class: 'drill-diagram-thumb', title: d.court_zone || '', html: courtDiagramSVG(d) }),
         h('div', { style: 'flex:1;min-width:0' }, [
           h('div', { class: 'page-header', style: 'margin-bottom:8px' }, [
             h('div', {}, [
@@ -105,9 +105,13 @@ function openDrillModal(drill, onDone) {
   const courtZone = h('input', { placeholder: 'Ex: Fundo de Quadra, Meia-Quadra, Rede...' });
   if (drill && drill.court_zone) courtZone.value = drill.court_zone;
   const courtZonePreview = h('div', { class: 'drill-diagram-thumb', style: 'width:56px;height:112px;margin-top:6px' });
-  function refreshCourtZonePreview() { courtZonePreview.innerHTML = courtDiagramSVG(courtZone.value); }
+  function refreshCourtZonePreview() {
+    courtZonePreview.innerHTML = courtDiagramSVG({ name: name.value, court_zone: courtZone.value, description: description.value });
+  }
   refreshCourtZonePreview();
   courtZone.addEventListener('input', refreshCourtZonePreview);
+  name.addEventListener('input', refreshCourtZonePreview);
+  description.addEventListener('input', refreshCourtZonePreview);
   const errorBox = h('div', { class: 'error-msg' });
 
   const form = h('form', {
