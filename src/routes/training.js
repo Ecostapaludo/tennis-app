@@ -62,6 +62,17 @@ function drillSelectionError(user, date, drillIds) {
   return null;
 }
 
+// Treinador so pode ELABORAR (criar) uma sessao nova depois que o head coach
+// ja definiu o foco daquela semana -- ele monta o treino dentro do foco
+// combinado, mas nao decide o foco em si. Head coach nunca e bloqueado aqui.
+function treinadorNeedsFocusError(user, date) {
+  if (user.role !== 'treinador') return null;
+  const weekStart = mondayOfWeek(date);
+  const focusRow = db.prepare('SELECT 1 FROM weekly_focus WHERE week_start = ?').get(weekStart);
+  if (focusRow) return null;
+  return 'O foco da semana ainda nao foi definido pelo head coach -- so e possivel elaborar sessoes de treino depois que o foco estiver definido.';
+}
+
 function attachAthletes(session) {
   const rows = db.prepare(
     `SELECT a.id, a.name, tsa.attendance FROM training_session_athletes tsa
@@ -303,6 +314,8 @@ export function registerTrainingRoutes(router) {
   router.post('/api/training-sessions', async (req, res, params, user) => {
     const b = await readJsonBody(req);
     if (!b.date || !b.title) return sendJson(res, 400, { error: 'Data e titulo sao obrigatorios.' });
+    const focusError = treinadorNeedsFocusError(user, b.date);
+    if (focusError) return sendJson(res, 403, { error: focusError });
     const drillError = drillSelectionError(user, b.date, b.drillIds);
     if (drillError) return sendJson(res, 403, { error: drillError });
     const info = db.prepare(

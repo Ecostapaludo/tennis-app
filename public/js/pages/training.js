@@ -583,7 +583,12 @@ function buildDayPanel(state, byDate, athletes, groups, drills, role, canEdit, w
     daySessions.forEach((s) => panel.appendChild(buildSessionItem(s, athletes, groups, canEdit, onReload)));
   }
 
-  if (canEdit) {
+  const weekFocusUndefined = !weekFocusMap.get(mondayOfWeek(state.selectedDate));
+  if (canEdit && role === 'treinador' && weekFocusUndefined) {
+    panel.appendChild(h('div', { class: 'hint-box', style: 'margin-top:14px' }, [
+      'O foco da semana ainda não foi definido pelo head coach — assim que ele definir, você poderá elaborar sessões de treino aqui.',
+    ]));
+  } else if (canEdit) {
     panel.appendChild(buildAddForm(state.selectedDate, athletes, groups, drills, role, weekFocusMap, onReload, daySessions, activeTab));
   }
 

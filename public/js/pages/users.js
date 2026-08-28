@@ -48,7 +48,7 @@ function openUserModal(athletes, onDone) {
   const email = h('input', { type: 'email', required: true, placeholder: 'email@exemplo.com' });
   const password = h('input', { type: 'password', required: true, placeholder: 'Senha provisória' });
   const role = h('select', { required: true }, [
-    h('option', { value: 'treinador' }, ['Treinador (visualiza planos de treino)']),
+    h('option', { value: 'treinador' }, ['Treinador (monta planos de treino quando o foco da semana já está definido)']),
     h('option', { value: 'responsavel' }, ['Responsável/aluno (visualiza jogos e avaliações)']),
   ]);
   const relationship = h('input', { placeholder: 'Ex: mãe, pai, o próprio atleta' });
