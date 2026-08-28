@@ -32,7 +32,10 @@ export async function renderUsers(main, ctx) {
       h('td', {}, [h('span', { class: 'badge badge-neutral' }, [ROLE_LABEL[u.role] || u.role])]),
       h('td', {}, [u.athletes.length ? u.athletes.map((a) => a.athleteName).join(', ') : '-']),
       h('td', {}, [u.active ? h('span', { class: 'badge badge-win' }, ['ativo']) : h('span', { class: 'badge badge-loss' }, ['inativo'])]),
-      h('td', {}, [
+      h('td', { style: 'display:flex;gap:6px' }, [
+        h('button', {
+          class: 'btn btn-sm', onClick: () => openEditUserModal(u, () => renderUsers(main, ctx)),
+        }, ['Editar']),
         u.role === 'head_coach' ? null : h('button', {
           class: 'btn btn-sm', onClick: async () => { await api.patch(`/api/users/${u.id}`, { active: !u.active }); renderUsers(main, ctx); },
         }, [u.active ? 'Desativar' : 'Ativar']),
@@ -102,4 +105,44 @@ function openUserModal(athletes, onDone) {
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
   document.body.appendChild(backdrop);
   toggleAthleteField();
+}
+
+// Edita um usuario ja existente (nome, email, senha opcional) -- inclusive o
+// head coach, que so nao tem o botao de ativar/desativar (pra nao correr o
+// risco de desativar a propria conta e ficar sem acesso).
+function openEditUserModal(user, onDone) {
+  const backdrop = h('div', { class: 'modal-backdrop' });
+  const name = h('input', { required: true, placeholder: 'Nome completo', value: user.name });
+  const email = h('input', { type: 'email', required: true, placeholder: 'email@exemplo.com', value: user.email });
+  const password = h('input', { type: 'password', placeholder: 'Deixe em branco para manter a senha atual' });
+  const errorBox = h('div', { class: 'error-msg' });
+
+  const form = h('form', {
+    onSubmit: async (e) => {
+      e.preventDefault();
+      try {
+        await api.patch(`/api/users/${user.id}`, {
+          name: name.value, email: email.value, password: password.value || undefined,
+        });
+        backdrop.remove();
+        onDone();
+      } catch (err) { errorBox.textContent = err.message; }
+    },
+  }, [
+    h('h2', {}, [`Editar usuário — ${ROLE_LABEL[user.role] || user.role}`]),
+    h('div', { class: 'form-grid', style: 'margin-top:14px' }, [
+      h('div', { class: 'form-field span-2' }, [h('label', {}, ['Nome']), name]),
+      h('div', { class: 'form-field span-2' }, [h('label', {}, ['Email']), email]),
+      h('div', { class: 'form-field span-2' }, [h('label', {}, ['Nova senha (opcional)']), password]),
+    ]),
+    errorBox,
+    h('div', { class: 'form-actions' }, [
+      h('button', { class: 'btn', type: 'button', onClick: () => backdrop.remove() }, ['Cancelar']),
+      h('button', { class: 'btn btn-primary', type: 'submit' }, ['Salvar']),
+    ]),
+  ]);
+
+  backdrop.appendChild(h('div', { class: 'modal-box' }, [form]));
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
+  document.body.appendChild(backdrop);
 }
