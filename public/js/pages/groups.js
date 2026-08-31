@@ -1,6 +1,7 @@
 import { h, clear, confirmModal } from '../dom.js';
 import { api } from '../api.js';
 import { BALL_STAGE_OPTS, BALL_STAGE_LABEL, BALL_STAGE_EMOJI } from '../kidsStages.js';
+import { MODALITY_OPTS, MODALITY_LABEL } from '../modality.js';
 
 const WEEKDAYS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
 const HOURS = Array.from({ length: 16 }, (_, i) => 6 + i); // 06h..21h (inicio de cada slot de 1h)
@@ -57,6 +58,7 @@ export async function renderGroups(main, ctx) {
           h('h3', {}, [g.name]),
           h('p', {}, [`${g.athletes.length} aluno${g.athletes.length === 1 ? '' : 's'}`]),
           h('span', { class: `badge ${g.is_dropin ? 'badge-neutral' : 'badge-torneio'}` }, [g.is_dropin ? 'Aula avulsa' : (g.schedule_time || 'Horário não definido')]),
+          h('span', { class: 'badge badge-neutral', style: 'margin-left:6px' }, [MODALITY_LABEL[g.modality] || g.modality]),
           g.ball_stage
             ? h('span', { class: 'badge badge-neutral', style: 'margin-left:6px' }, [`${BALL_STAGE_EMOJI[g.ball_stage] || ''} ${BALL_STAGE_LABEL[g.ball_stage] || g.ball_stage}`])
             : null,
@@ -122,6 +124,15 @@ function openGroupModal(group, athletes, headCoaches, trainerUsers, onDone) {
     return label;
   }));
 
+  const modalitySelect = h('select', {}, MODALITY_OPTS.map((m) => h('option', { value: m.value, selected: (group?.modality || 'tenis') === m.value }, [m.label])));
+  const modalityField = h('div', { class: 'form-field span-2' }, [
+    h('label', {}, ['Modalidade da turma']),
+    modalitySelect,
+    h('p', { style: 'font-size:11.5px;color:var(--text-muted);margin-top:4px' }, [
+      'Treinadores só conseguem montar planos de aula para turmas da própria modalidade.',
+    ]),
+  ]);
+
   const ballStageSelect = h('select', {}, [
     h('option', { value: '' }, ['Não definido']),
     ...BALL_STAGE_OPTS.map((s) => h('option', { value: s.value, selected: !!(group && group.ball_stage === s.value) }, [`${BALL_STAGE_EMOJI[s.value]} ${s.label}`])),
@@ -167,6 +178,7 @@ function openGroupModal(group, athletes, headCoaches, trainerUsers, onDone) {
           headCoachId: headCoachSelect.value ? Number(headCoachSelect.value) : null,
           trainerIds: Array.from(trainerIds),
           ballStage: ballStageSelect.value || null,
+          modality: modalitySelect.value,
         };
         if (group) await api.put(`/api/groups/${group.id}`, payload);
         else await api.post('/api/groups', payload);
@@ -179,6 +191,7 @@ function openGroupModal(group, athletes, headCoaches, trainerUsers, onDone) {
     h('div', { class: 'form-grid', style: 'margin-top:14px' }, [
       h('div', { class: 'form-field span-2' }, [h('label', {}, ['Nome da turma']), name]),
       h('div', { class: 'form-field span-2' }, [h('label', {}, ['Descrição']), description]),
+      modalityField,
       scheduleField,
       dropinField,
       ballStageField,

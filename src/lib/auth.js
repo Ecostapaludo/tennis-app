@@ -33,7 +33,7 @@ export function createSession(userId) {
 export function getUserFromToken(token) {
   if (!token) return null;
   const row = db.prepare(
-    `SELECT s.token, s.expires_at, u.id, u.name, u.email, u.role, u.active
+    `SELECT s.token, s.expires_at, u.id, u.name, u.email, u.role, u.active, u.modality
      FROM sessions s JOIN users u ON u.id = s.user_id
      WHERE s.token = ?`
   ).get(token);
@@ -43,7 +43,7 @@ export function getUserFromToken(token) {
     db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
     return null;
   }
-  const user = { id: row.id, name: row.name, email: row.email, role: row.role };
+  const user = { id: row.id, name: row.name, email: row.email, role: row.role, modality: row.modality };
   if (row.role === ROLES.RESPONSAVEL) {
     const links = db.prepare('SELECT athlete_id FROM athlete_guardians WHERE user_id = ?').all(row.id);
     user.athleteIds = links.map((l) => l.athlete_id);

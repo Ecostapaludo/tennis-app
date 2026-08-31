@@ -8,6 +8,11 @@ function normalizeBallStage(ballStage) {
   return BALL_STAGES.has(ballStage) ? ballStage : null;
 }
 
+const MODALITIES = new Set(['tenis', 'beach_tennis']);
+function normalizeModality(modality) {
+  return MODALITIES.has(modality) ? modality : 'tenis';
+}
+
 function attachMembers(group) {
   const rows = db.prepare(
     `SELECT a.id, a.name FROM athlete_group_members agm
@@ -68,14 +73,15 @@ export function registerGroupRoutes(router) {
     const schErr = scheduleError(isDropin, b.scheduleSlots);
     if (schErr) return sendJson(res, 400, { error: schErr });
     const info = db.prepare(
-      'INSERT INTO athlete_groups (created_by, name, description, schedule_time, schedule_slots, is_dropin, head_coach_id, ball_stage) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO athlete_groups (created_by, name, description, schedule_time, schedule_slots, is_dropin, head_coach_id, ball_stage, modality) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).run(
       user.id, b.name.trim(), b.description || null,
       isDropin ? null : (b.scheduleTime || null),
       isDropin ? null : JSON.stringify(b.scheduleSlots),
       isDropin ? 1 : 0,
       b.headCoachId || null,
-      normalizeBallStage(b.ballStage)
+      normalizeBallStage(b.ballStage),
+      normalizeModality(b.modality)
     );
     const groupId = Number(info.lastInsertRowid);
     if (Array.isArray(b.athleteIds)) {
@@ -98,7 +104,7 @@ export function registerGroupRoutes(router) {
       : (existing.schedule_slots ? JSON.parse(existing.schedule_slots) : []);
     const schErr = scheduleError(isDropin, scheduleSlots);
     if (schErr) return sendJson(res, 400, { error: schErr });
-    db.prepare('UPDATE athlete_groups SET name=?, description=?, schedule_time=?, schedule_slots=?, is_dropin=?, head_coach_id=?, ball_stage=? WHERE id=?').run(
+    db.prepare('UPDATE athlete_groups SET name=?, description=?, schedule_time=?, schedule_slots=?, is_dropin=?, head_coach_id=?, ball_stage=?, modality=? WHERE id=?').run(
       b.name !== undefined ? b.name.trim() : existing.name,
       b.description !== undefined ? b.description : existing.description,
       isDropin ? null : (b.scheduleTime !== undefined ? b.scheduleTime : existing.schedule_time),
@@ -106,6 +112,7 @@ export function registerGroupRoutes(router) {
       isDropin ? 1 : 0,
       b.headCoachId !== undefined ? (b.headCoachId || null) : existing.head_coach_id,
       b.ballStage !== undefined ? normalizeBallStage(b.ballStage) : existing.ball_stage,
+      b.modality !== undefined ? normalizeModality(b.modality) : existing.modality,
       id
     );
     if (Array.isArray(b.athleteIds)) {

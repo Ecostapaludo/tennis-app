@@ -139,6 +139,17 @@ export async function renderTraining(main, ctx) {
     canEdit ? api.get('/api/drills') : Promise.resolve([]),
     canEdit ? api.get('/api/weekly-focus') : Promise.resolve([]),
   ]);
+  // Treinador so enxerga/monta planos dentro da propria modalidade (tenis ou
+  // beach tennis) -- filtra turmas/atletas/drills antes de tudo, pra que o
+  // resto da pagina (calendario, picker de drills, historico) va naturalmente
+  // operar so sobre esse subconjunto, sem precisar de outra camada de restricao.
+  if (role === 'treinador' && ctx.user.modality) {
+    athletes = athletes.filter((a) => a.modality === ctx.user.modality);
+    groups = groups.filter((g) => g.modality === ctx.user.modality);
+    drills = drills.filter((d) => d.modality === ctx.user.modality);
+    const athleteIds = new Set(athletes.map((a) => a.id));
+    sessions = sessions.filter((s) => (s.athletes || []).some((a) => athleteIds.has(a.id)));
+  }
   clear(main);
 
   const today = new Date();

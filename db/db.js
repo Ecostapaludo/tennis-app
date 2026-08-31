@@ -69,6 +69,10 @@ ensureColumn('stroke_video_analyses', 'pose_landmarks_json', 'TEXT');
 ensureColumn('drills', 'kids_stage', 'TEXT');
 ensureColumn('training_sessions', 'kids_stage', 'TEXT');
 ensureColumn('athlete_groups', 'ball_stage', 'TEXT');
+ensureColumn('users', 'modality', "TEXT NOT NULL DEFAULT 'tenis'");
+ensureColumn('athletes', 'modality', "TEXT NOT NULL DEFAULT 'tenis'");
+ensureColumn('athlete_groups', 'modality', "TEXT NOT NULL DEFAULT 'tenis'");
+ensureColumn('drills', 'modality', "TEXT NOT NULL DEFAULT 'tenis'");
 
 export default db;
 export { dbPath };

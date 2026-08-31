@@ -33,7 +33,7 @@ export function registerAuthRoutes(router) {
 
     const { token, expiresAt } = createSession(row.id);
     setSessionCookie(res, token, expiresAt);
-    sendJson(res, 200, { id: row.id, name: row.name, email: row.email, role: row.role });
+    sendJson(res, 200, { id: row.id, name: row.name, email: row.email, role: row.role, modality: row.modality });
   });
 
   router.post('/api/auth/logout', async (req, res) => {

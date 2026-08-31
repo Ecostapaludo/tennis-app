@@ -303,7 +303,15 @@ export async function renderDashboard(main, ctx) {
     api.get('/api/tournaments'),
     api.get('/api/training-sessions'),
   ]);
-  const activeAthletes = athletes.filter((a) => a.active);
+  // Treinador so ve turmas/atletas da propria modalidade no resumo (mesmo
+  // filtro aplicado no planejamento de treinos).
+  const scopedGroups = ctx.user.role === 'treinador' && ctx.user.modality
+    ? groups.filter((g) => g.modality === ctx.user.modality)
+    : groups;
+  const scopedAthletes = ctx.user.role === 'treinador' && ctx.user.modality
+    ? athletes.filter((a) => a.modality === ctx.user.modality)
+    : athletes;
+  const activeAthletes = scopedAthletes.filter((a) => a.active);
 
   const stats = h('div', { class: 'grid grid-3' });
   [
@@ -319,7 +327,7 @@ export async function renderDashboard(main, ctx) {
 
   main.appendChild(buildAthleteSummaryCard(activeAthletes));
 
-  main.appendChild(buildWeekCard(groups, sessions));
+  main.appendChild(buildWeekCard(scopedGroups, sessions));
 
   main.appendChild(buildTournamentsCard(tournaments, athletes, canEditTournaments, () => renderDashboard(main, ctx)));
 

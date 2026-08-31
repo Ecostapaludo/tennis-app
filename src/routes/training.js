@@ -73,6 +73,32 @@ function treinadorNeedsFocusError(user, date) {
   return 'O foco da semana ainda nao foi definido pelo head coach -- so e possivel elaborar sessoes de treino depois que o foco estiver definido.';
 }
 
+// Treinador so pode montar sessoes dentro da sua propria modalidade (tenis ou
+// beach tennis) -- vale tanto para os atletas quanto para os drills
+// selecionados. Head coach nunca e restrito por modalidade.
+function modalityMismatchError(user, athleteIds, drillIds) {
+  if (user.role !== 'treinador') return null;
+  if (Array.isArray(athleteIds) && athleteIds.length) {
+    const placeholders = athleteIds.map(() => '?').join(',');
+    const offAthlete = db.prepare(
+      `SELECT COUNT(*) as c FROM athletes WHERE id IN (${placeholders}) AND modality != ?`
+    ).get(...athleteIds, user.modality);
+    if (offAthlete.c > 0) {
+      return `Você só pode montar sessões para atletas da modalidade "${user.modality === 'beach_tennis' ? 'Beach Tennis' : 'Tênis'}".`;
+    }
+  }
+  if (Array.isArray(drillIds) && drillIds.length) {
+    const placeholders = drillIds.map(() => '?').join(',');
+    const offDrill = db.prepare(
+      `SELECT COUNT(*) as c FROM drills WHERE id IN (${placeholders}) AND modality != ?`
+    ).get(...drillIds, user.modality);
+    if (offDrill.c > 0) {
+      return `Você só pode usar drills da modalidade "${user.modality === 'beach_tennis' ? 'Beach Tennis' : 'Tênis'}".`;
+    }
+  }
+  return null;
+}
+
 function attachAthletes(session) {
   const rows = db.prepare(
     `SELECT a.id, a.name, tsa.attendance FROM training_session_athletes tsa
@@ -316,6 +342,8 @@ export function registerTrainingRoutes(router) {
     if (!b.date || !b.title) return sendJson(res, 400, { error: 'Data e titulo sao obrigatorios.' });
     const focusError = treinadorNeedsFocusError(user, b.date);
     if (focusError) return sendJson(res, 403, { error: focusError });
+    const modalityError = modalityMismatchError(user, b.athleteIds, b.drillIds);
+    if (modalityError) return sendJson(res, 403, { error: modalityError });
     const drillError = drillSelectionError(user, b.date, b.drillIds);
     if (drillError) return sendJson(res, 403, { error: drillError });
     const info = db.prepare(
@@ -342,6 +370,8 @@ export function registerTrainingRoutes(router) {
     const b = await readJsonBody(req);
     const existing = db.prepare('SELECT * FROM training_sessions WHERE id = ?').get(id);
     if (!existing) return sendJson(res, 404, { error: 'Sessao nao encontrada.' });
+    const modalityError = modalityMismatchError(user, b.athleteIds, b.drillIds);
+    if (modalityError) return sendJson(res, 403, { error: modalityError });
     const drillError = drillSelectionError(user, b.date ?? existing.date, b.drillIds);
     if (drillError) return sendJson(res, 403, { error: drillError });
     db.prepare(

@@ -1,5 +1,6 @@
 import { h, clear, fmtDate } from '../dom.js';
 import { api } from '../api.js';
+import { MODALITY_OPTS, MODALITY_LABEL } from '../modality.js';
 
 const ROLE_LABEL = { head_coach: 'Head Coach', treinador: 'Treinador', responsavel: 'Responsável' };
 
@@ -20,16 +21,17 @@ export async function renderUsers(main, ctx) {
 
   main.appendChild(h('div', { class: 'notice-banner' }, [
     h('strong', {}, ['Permissões: ']),
-    'Head coach tem acesso total. Treinador só visualiza o planejamento de treinos (planos de aula). ',
+    'Head coach tem acesso total. Treinador monta planos de aula (turmas, atletas e drills) só dentro da própria modalidade e só depois que o foco da semana está definido. ',
     'Responsável/aluno só visualiza jogos e avaliações do(s) atleta(s) vinculado(s) a ele.',
   ]));
 
   const table = h('table', {}, [
-    h('thead', {}, [h('tr', {}, [h('th', {}, ['Nome']), h('th', {}, ['Email']), h('th', {}, ['Papel']), h('th', {}, ['Atletas vinculados']), h('th', {}, ['Status']), h('th', {}, [''])])]),
+    h('thead', {}, [h('tr', {}, [h('th', {}, ['Nome']), h('th', {}, ['Email']), h('th', {}, ['Papel']), h('th', {}, ['Modalidade']), h('th', {}, ['Atletas vinculados']), h('th', {}, ['Status']), h('th', {}, [''])])]),
     h('tbody', {}, users.map((u) => h('tr', {}, [
       h('td', {}, [u.name]),
       h('td', {}, [u.email]),
       h('td', {}, [h('span', { class: 'badge badge-neutral' }, [ROLE_LABEL[u.role] || u.role])]),
+      h('td', {}, [u.role === 'treinador' ? (MODALITY_LABEL[u.modality] || u.modality) : '-']),
       h('td', {}, [u.athletes.length ? u.athletes.map((a) => a.athleteName).join(', ') : '-']),
       h('td', {}, [u.active ? h('span', { class: 'badge badge-win' }, ['ativo']) : h('span', { class: 'badge badge-loss' }, ['inativo'])]),
       h('td', { style: 'display:flex;gap:6px' }, [
@@ -55,7 +57,15 @@ function openUserModal(athletes, onDone) {
     h('option', { value: 'responsavel' }, ['Responsável/aluno (visualiza jogos e avaliações)']),
   ]);
   const relationship = h('input', { placeholder: 'Ex: mãe, pai, o próprio atleta' });
+  const modality = h('select', {}, MODALITY_OPTS.map((m) => h('option', { value: m.value }, [m.label])));
   const errorBox = h('div', { class: 'error-msg' });
+
+  const modalityField = h('div', { class: 'form-field span-2' }, [
+    h('label', {}, ['Modalidade (apenas para Treinador)']), modality,
+    h('p', { style: 'font-size:11.5px;color:var(--text-muted);margin-top:4px' }, [
+      'O treinador só vai conseguir montar planos de aula com turmas/atletas/drills dessa modalidade.',
+    ]),
+  ]);
 
   const checkedIds = new Set();
   const athleteField = h('div', { class: 'form-field', style: 'margin-top:10px' }, [
@@ -70,6 +80,7 @@ function openUserModal(athletes, onDone) {
 
   function toggleAthleteField() {
     athleteField.style.display = role.value === 'responsavel' ? '' : 'none';
+    modalityField.style.display = role.value === 'treinador' ? '' : 'none';
   }
   role.addEventListener('change', toggleAthleteField);
 
@@ -79,7 +90,7 @@ function openUserModal(athletes, onDone) {
       try {
         await api.post('/api/users', {
           name: name.value, email: email.value, password: password.value, role: role.value,
-          athleteIds: Array.from(checkedIds), relationship: relationship.value || null,
+          modality: modality.value, athleteIds: Array.from(checkedIds), relationship: relationship.value || null,
         });
         backdrop.remove();
         onDone();
@@ -92,6 +103,7 @@ function openUserModal(athletes, onDone) {
       h('div', { class: 'form-field span-2' }, [h('label', {}, ['Email']), email]),
       h('div', { class: 'form-field span-2' }, [h('label', {}, ['Senha provisória']), password]),
       h('div', { class: 'form-field span-2' }, [h('label', {}, ['Papel']), role]),
+      modalityField,
     ]),
     athleteField,
     errorBox,
@@ -115,6 +127,7 @@ function openEditUserModal(user, onDone) {
   const name = h('input', { required: true, placeholder: 'Nome completo', value: user.name });
   const email = h('input', { type: 'email', required: true, placeholder: 'email@exemplo.com', value: user.email });
   const password = h('input', { type: 'password', placeholder: 'Deixe em branco para manter a senha atual' });
+  const modality = h('select', {}, MODALITY_OPTS.map((m) => h('option', { value: m.value, selected: user.modality === m.value }, [m.label])));
   const errorBox = h('div', { class: 'error-msg' });
 
   const form = h('form', {
@@ -123,6 +136,7 @@ function openEditUserModal(user, onDone) {
       try {
         await api.patch(`/api/users/${user.id}`, {
           name: name.value, email: email.value, password: password.value || undefined,
+          modality: user.role === 'treinador' ? modality.value : undefined,
         });
         backdrop.remove();
         onDone();
@@ -134,6 +148,7 @@ function openEditUserModal(user, onDone) {
       h('div', { class: 'form-field span-2' }, [h('label', {}, ['Nome']), name]),
       h('div', { class: 'form-field span-2' }, [h('label', {}, ['Email']), email]),
       h('div', { class: 'form-field span-2' }, [h('label', {}, ['Nova senha (opcional)']), password]),
+      user.role === 'treinador' ? h('div', { class: 'form-field span-2' }, [h('label', {}, ['Modalidade']), modality]) : null,
     ]),
     errorBox,
     h('div', { class: 'form-actions' }, [

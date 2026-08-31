@@ -11,6 +11,9 @@ CREATE TABLE IF NOT EXISTS users (
   password_salt TEXT NOT NULL,
   role TEXT NOT NULL CHECK (role IN ('head_coach','treinador','responsavel')),
   active INTEGER NOT NULL DEFAULT 1,
+  -- Modalidade que o treinador leciona (tenis ou beach tennis) -- so
+  -- consegue montar planos de aula dentro dela. Irrelevante pra outros papeis.
+  modality TEXT NOT NULL DEFAULT 'tenis' CHECK (modality IN ('tenis','beach_tennis')),
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -33,6 +36,7 @@ CREATE TABLE IF NOT EXISTS athletes (
   club TEXT,
   notes TEXT,
   active INTEGER NOT NULL DEFAULT 1,
+  modality TEXT NOT NULL DEFAULT 'tenis' CHECK (modality IN ('tenis','beach_tennis')),
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -57,6 +61,7 @@ CREATE TABLE IF NOT EXISTS athlete_groups (
   is_dropin INTEGER NOT NULL DEFAULT 0,
   head_coach_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
   ball_stage TEXT CHECK (ball_stage IS NULL OR ball_stage IN ('vermelha','laranja','verde','amarela')),
+  modality TEXT NOT NULL DEFAULT 'tenis' CHECK (modality IN ('tenis','beach_tennis')),
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -104,6 +109,7 @@ CREATE TABLE IF NOT EXISTS drills (
   equipment TEXT,
   court_zone TEXT,
   kids_stage TEXT CHECK (kids_stage IS NULL OR kids_stage IN ('vermelha','laranja','verde')),
+  modality TEXT NOT NULL DEFAULT 'tenis' CHECK (modality IN ('tenis','beach_tennis')),
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

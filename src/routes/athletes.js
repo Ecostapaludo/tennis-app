@@ -2,6 +2,11 @@ import db from '../../db/db.js';
 import { sendJson, readJsonBody } from '../lib/router.js';
 import { ROLES } from '../lib/auth.js';
 
+const MODALITIES = new Set(['tenis', 'beach_tennis']);
+function normalizeModality(modality) {
+  return MODALITIES.has(modality) ? modality : 'tenis';
+}
+
 function scopeAthleteIds(user) {
   if (user.role === ROLES.RESPONSAVEL) return user.athleteIds || [];
   return null; // null = sem restricao (head_coach / treinador veem todos)
@@ -34,10 +39,10 @@ export function registerAthleteRoutes(router) {
     const b = await readJsonBody(req);
     if (!b.name || !b.name.trim()) return sendJson(res, 400, { error: 'Nome e obrigatorio.' });
     const info = db.prepare(
-      `INSERT INTO athletes (created_by, name, birth_date, category, gender, dominant_hand, ranking_position, club, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO athletes (created_by, name, birth_date, category, gender, dominant_hand, ranking_position, club, notes, modality)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(user.id, b.name.trim(), b.birthDate || null, b.category || null, b.gender || null, b.dominantHand || null,
-      b.rankingPosition || null, b.club || null, b.notes || null);
+      b.rankingPosition || null, b.club || null, b.notes || null, normalizeModality(b.modality));
     sendJson(res, 201, { id: Number(info.lastInsertRowid) });
   });
 
@@ -47,7 +52,7 @@ export function registerAthleteRoutes(router) {
     const existing = db.prepare('SELECT * FROM athletes WHERE id = ?').get(id);
     if (!existing) return sendJson(res, 404, { error: 'Atleta nao encontrado.' });
     db.prepare(
-      `UPDATE athletes SET name=?, birth_date=?, category=?, gender=?, dominant_hand=?, ranking_position=?, club=?, notes=?, active=?
+      `UPDATE athletes SET name=?, birth_date=?, category=?, gender=?, dominant_hand=?, ranking_position=?, club=?, notes=?, active=?, modality=?
        WHERE id=?`
     ).run(
       b.name ?? existing.name,
@@ -59,6 +64,7 @@ export function registerAthleteRoutes(router) {
       b.club ?? existing.club,
       b.notes ?? existing.notes,
       b.active !== undefined ? (b.active ? 1 : 0) : existing.active,
+      b.modality !== undefined ? normalizeModality(b.modality) : existing.modality,
       id
     );
     sendJson(res, 200, { ok: true });

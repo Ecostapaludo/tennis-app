@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { radarChart, lineChart } from '../components/charts.js';
 import { radarAxes, radarValues } from '../evalCriteria.js';
 import { CATEGORY_OPTS, GENDER_OPTS, GENDER_LABEL } from '../athleteCategories.js';
+import { MODALITY_OPTS, MODALITY_LABEL } from '../modality.js';
 
 export async function renderAthletes(main, ctx) {
   const athletes = await api.get('/api/athletes');
@@ -26,6 +27,7 @@ export async function renderAthletes(main, ctx) {
       h('a', { href: `#/athletes/${a.id}`, style: 'display:block;text-decoration:none;color:inherit;cursor:pointer' }, [
         h('h3', {}, [a.name]),
         h('p', {}, [`${a.category || 'Sem categoria'}${a.gender ? ' · ' + GENDER_LABEL[a.gender] : ''} · ${a.dominant_hand || 'Sem info'}`]),
+        h('span', { class: 'badge badge-neutral' }, [MODALITY_LABEL[a.modality] || a.modality]),
         a.ranking_position ? h('p', {}, [`Ranking: #${a.ranking_position}`]) : null,
         a.club ? h('p', {}, [a.club]) : null,
       ]),
@@ -63,6 +65,7 @@ function openAthleteModal(onDone, athlete) {
   const ranking = h('input', { type: 'number', placeholder: 'Posição no ranking', value: athlete?.ranking_position ?? '' });
   const club = h('input', { placeholder: 'Clube', value: athlete?.club || '' });
   const notes = h('textarea', { placeholder: 'Observações' }, [athlete?.notes || '']);
+  const modality = h('select', {}, MODALITY_OPTS.map((m) => h('option', { value: m.value, selected: (athlete?.modality || 'tenis') === m.value }, [m.label])));
   const errorBox = h('div', { class: 'error-msg' });
 
   const form = h('form', {
@@ -72,7 +75,7 @@ function openAthleteModal(onDone, athlete) {
         const payload = {
           name: name.value, birthDate: birth.value || null, category: category.value || null,
           gender: gender.value || null, dominantHand: hand.value || null, rankingPosition: ranking.value ? Number(ranking.value) : null,
-          club: club.value || null, notes: notes.value || null,
+          club: club.value || null, notes: notes.value || null, modality: modality.value,
         };
         if (isEdit) await api.put(`/api/athletes/${athlete.id}`, payload);
         else await api.post('/api/athletes', payload);
@@ -88,6 +91,7 @@ function openAthleteModal(onDone, athlete) {
       h('div', { class: 'form-field' }, [h('label', {}, ['Categoria']), category]),
       h('div', { class: 'form-field' }, [h('label', {}, ['Sexo']), gender]),
       h('div', { class: 'form-field' }, [h('label', {}, ['Mão dominante']), hand]),
+      h('div', { class: 'form-field' }, [h('label', {}, ['Modalidade']), modality]),
       h('div', { class: 'form-field' }, [h('label', {}, ['Ranking']), ranking]),
       h('div', { class: 'form-field span-2' }, [h('label', {}, ['Clube']), club]),
       h('div', { class: 'form-field span-2' }, [h('label', {}, ['Observações']), notes]),
@@ -118,7 +122,7 @@ export async function renderAthleteDetail(main, ctx) {
   main.appendChild(h('div', { class: 'page-header', style: 'margin-top:8px' }, [
     h('div', {}, [
       h('h1', {}, [athlete.name]),
-      h('p', {}, [`${athlete.category || 'Sem categoria'} · ${athlete.dominant_hand || ''} ${athlete.club ? '· ' + athlete.club : ''}`]),
+      h('p', {}, [`${MODALITY_LABEL[athlete.modality] || athlete.modality} · ${athlete.category || 'Sem categoria'} · ${athlete.dominant_hand || ''} ${athlete.club ? '· ' + athlete.club : ''}`]),
     ]),
   ]));
 

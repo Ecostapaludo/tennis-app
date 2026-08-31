@@ -4,6 +4,7 @@ import { sendJson, readJsonBody } from '../lib/router.js';
 const FOCUS_CATEGORIES = new Set(['technical', 'physical', 'tactical', 'mental']);
 const TECHNICAL_SUBCATEGORIES = new Set(['serve', 'volley_smash', 'forehand', 'backhand']);
 const KIDS_STAGES = new Set(['vermelha', 'laranja', 'verde']);
+const MODALITIES = new Set(['tenis', 'beach_tennis']);
 
 const FOCUS_LABEL = { technical: 'Técnico', physical: 'Físico', tactical: 'Tático', mental: 'Mental' };
 const SUBCATEGORY_LABEL = { serve: 'Saque', volley_smash: 'Voleio/Smash', forehand: 'Forehand', backhand: 'Backhand/Slice' };
@@ -40,6 +41,10 @@ function normalizeKidsStage(kidsStage) {
   return KIDS_STAGES.has(kidsStage) ? kidsStage : null;
 }
 
+function normalizeModality(modality) {
+  return MODALITIES.has(modality) ? modality : 'tenis';
+}
+
 export function registerDrillRoutes(router) {
   router.get('/api/drills', async (req, res, params, user, query) => {
     if (query && query.focusCategory) {
@@ -50,15 +55,20 @@ export function registerDrillRoutes(router) {
       const rows = db.prepare('SELECT * FROM drills WHERE kids_stage = ? ORDER BY focus_category, name').all(query.kidsStage);
       return sendJson(res, 200, rows);
     }
+    if (query && query.modality) {
+      const rows = db.prepare('SELECT * FROM drills WHERE modality = ? ORDER BY focus_category, name').all(query.modality);
+      return sendJson(res, 200, rows);
+    }
     const rows = db.prepare('SELECT * FROM drills ORDER BY focus_category, name').all();
     sendJson(res, 200, rows);
   });
 
   router.get('/api/drills/export', async (req, res) => {
     const rows = db.prepare('SELECT * FROM drills ORDER BY focus_category, subcategory, name').all();
-    const header = ['ID', 'Nome', 'Foco', 'Subcategoria', 'Estágio (bola)', 'Zona da quadra', 'Descrição', 'Material', 'Duração (min)', 'Prompt sugerido para IA de imagem'];
+    const header = ['ID', 'Nome', 'Modalidade', 'Foco', 'Subcategoria', 'Estágio (bola)', 'Zona da quadra', 'Descrição', 'Material', 'Duração (min)', 'Prompt sugerido para IA de imagem'];
     const lines = [header, ...rows.map((d) => [
-      d.id, d.name, FOCUS_LABEL[d.focus_category] || d.focus_category,
+      d.id, d.name, d.modality === 'beach_tennis' ? 'Beach Tennis' : 'Tênis',
+      FOCUS_LABEL[d.focus_category] || d.focus_category,
       d.subcategory ? SUBCATEGORY_LABEL[d.subcategory] || d.subcategory : '',
       d.kids_stage ? KIDS_STAGE_LABEL[d.kids_stage] || d.kids_stage : '',
       d.court_zone || '',
@@ -86,12 +96,12 @@ export function registerDrillRoutes(router) {
     if (!b.name || !b.name.trim()) return sendJson(res, 400, { error: 'Nome do drill e obrigatorio.' });
     if (!FOCUS_CATEGORIES.has(b.focusCategory)) return sendJson(res, 400, { error: 'Foco invalido.' });
     const info = db.prepare(
-      `INSERT INTO drills (created_by, name, focus_category, subcategory, description, duration_minutes, equipment, court_zone, kids_stage)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO drills (created_by, name, focus_category, subcategory, description, duration_minutes, equipment, court_zone, kids_stage, modality)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       user.id, b.name.trim(), b.focusCategory, normalizeSubcategory(b.focusCategory, b.subcategory),
       b.description || null, b.durationMinutes || null, b.equipment || null, b.courtZone || null,
-      normalizeKidsStage(b.kidsStage)
+      normalizeKidsStage(b.kidsStage), normalizeModality(b.modality)
     );
     sendJson(res, 201, { id: Number(info.lastInsertRowid) });
   });
@@ -108,7 +118,7 @@ export function registerDrillRoutes(router) {
       ? normalizeSubcategory(nextFocusCategory, b.subcategory)
       : normalizeSubcategory(nextFocusCategory, existing.subcategory);
     db.prepare(
-      'UPDATE drills SET name=?, focus_category=?, subcategory=?, description=?, duration_minutes=?, equipment=?, court_zone=?, kids_stage=? WHERE id=?'
+      'UPDATE drills SET name=?, focus_category=?, subcategory=?, description=?, duration_minutes=?, equipment=?, court_zone=?, kids_stage=?, modality=? WHERE id=?'
     ).run(
       b.name !== undefined ? b.name.trim() : existing.name,
       nextFocusCategory,
@@ -118,6 +128,7 @@ export function registerDrillRoutes(router) {
       b.equipment !== undefined ? b.equipment : existing.equipment,
       b.courtZone !== undefined ? b.courtZone : existing.court_zone,
       b.kidsStage !== undefined ? normalizeKidsStage(b.kidsStage) : existing.kids_stage,
+      b.modality !== undefined ? normalizeModality(b.modality) : existing.modality,
       id
     );
     sendJson(res, 200, { ok: true });

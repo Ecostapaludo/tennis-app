@@ -2,6 +2,7 @@ import { h, clear, confirmModal } from '../dom.js';
 import { api } from '../api.js';
 import { FOCUS_OPTS, TECHNICAL_SUBCATEGORY_OPTS } from '../focus.js';
 import { KIDS_STAGE_OPTS, KIDS_STAGE_LABEL } from '../kidsStages.js';
+import { MODALITY_OPTS, MODALITY_LABEL } from '../modality.js';
 import { courtDiagramSVG } from '../components/courtDiagram.js';
 
 export async function renderDrills(main, ctx) {
@@ -57,6 +58,7 @@ function buildDrillGrid(list, canEdit, main, ctx) {
               h('h3', {}, [d.name]),
               h('p', {}, [d.duration_minutes ? `${d.duration_minutes} min` : 'Duração não informada']),
               d.kids_stage ? h('span', { class: 'badge badge-neutral' }, [KIDS_STAGE_LABEL[d.kids_stage] || d.kids_stage]) : null,
+              d.modality === 'beach_tennis' ? h('span', { class: 'badge badge-neutral' }, [MODALITY_LABEL[d.modality]]) : null,
             ]),
             canEdit ? h('div', {}, [
               h('button', { class: 'btn btn-sm', type: 'button', onClick: () => openDrillModal(d, async () => renderDrills(main, ctx)) }, ['Editar']),
@@ -102,6 +104,7 @@ function openDrillModal(drill, onDone) {
     ...KIDS_STAGE_OPTS.map((s) => h('option', { value: s.value }, [s.label])),
   ]);
   if (drill && drill.kids_stage) kidsStage.value = drill.kids_stage;
+  const modality = h('select', {}, MODALITY_OPTS.map((m) => h('option', { value: m.value, selected: (drill?.modality || 'tenis') === m.value }, [m.label])));
   const courtZone = h('input', { placeholder: 'Ex: Fundo de Quadra, Meia-Quadra, Rede...' });
   if (drill && drill.court_zone) courtZone.value = drill.court_zone;
   const courtZonePreview = h('div', { class: 'drill-diagram-thumb', style: 'width:56px;height:112px;margin-top:6px' });
@@ -123,7 +126,7 @@ function openDrillModal(drill, onDone) {
           subcategory: focusCategory.value === 'technical' ? (subcategory.value || null) : null,
           durationMinutes: duration.value ? Number(duration.value) : null,
           equipment: equipment.value || null, description: description.value || null,
-          courtZone: courtZone.value || null, kidsStage: kidsStage.value || null,
+          courtZone: courtZone.value || null, kidsStage: kidsStage.value || null, modality: modality.value,
         };
         if (drill) await api.put(`/api/drills/${drill.id}`, payload);
         else await api.post('/api/drills', payload);
@@ -142,6 +145,7 @@ function openDrillModal(drill, onDone) {
       h('div', { class: 'form-field span-2' }, [h('label', {}, ['Descrição / como executar']), description]),
       h('div', { class: 'form-field span-2' }, [h('label', {}, ['Zona da quadra (para o diagrama)']), courtZone, courtZonePreview]),
       h('div', { class: 'form-field' }, [h('label', {}, ['Estágio (mini-tênis)']), kidsStage]),
+      h('div', { class: 'form-field' }, [h('label', {}, ['Modalidade']), modality]),
     ]),
     errorBox,
     h('div', { class: 'form-actions' }, [
