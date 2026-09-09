@@ -1,3 +1,8 @@
+// Entry point (ponto de entrada) do servidor da aplicacao tennis-app.
+// Aqui o servidor HTTP e configurado e inicializado: carrega as variaveis de
+// ambiente, registra as rotas da API e comeca a escutar as requisicoes.
+// E por este arquivo que a aplicacao comeca a rodar.
+
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
