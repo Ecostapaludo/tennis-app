@@ -1,4 +1,5 @@
 {
+  "//": "tennis-coach-app: aplicacao web (Node + servidor proprio em server.js) para head coaches de tenis e beach tennis. Centraliza cadastro de atletas, planejamento e registro de treinos, avaliacoes fisicas e tecnicas, scout de jogos, analise de video e geracao de planos de treino com IA.",
   "name": "tennis-coach-app",
   "version": "1.0.0",
   "description": "App para head coach de tenis: planejamento de treinos, avaliacoes, scout de jogos, analise de video e planos de treino com IA",
