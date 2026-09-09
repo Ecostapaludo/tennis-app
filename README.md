@@ -154,3 +154,5 @@ isso relativamente direto.
 Todo o banco de dados vive em um único arquivo: `data/tennis_coach.db`. Para
 fazer backup, basta copiar esse arquivo (com o servidor parado, para
 garantir consistência). Os vídeos enviados ficam em `uploads/`.
+
+O assistente de Telegram também trabalha neste repositório.
