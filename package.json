@@ -1,7 +1,8 @@
 {
+  "_about": "Aplicativo de gestao para escola de tenis: planejamento de treinos, avaliacoes de alunos e scout de jogos.",
   "name": "tennis-coach-app",
   "version": "1.0.0",
-  "description": "App para head coach de tenis: planejamento de treinos, avaliacoes, scout de jogos, analise de video e planos de treino com IA",
+  "description": "Aplicativo de gestao para escola de tenis, com planejamento de treinos, avaliacoes e scout de jogos",
   "type": "module",
   "engines": {
     "node": ">=22.5.0"
